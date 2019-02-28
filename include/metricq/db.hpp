@@ -33,7 +33,7 @@
 #include <metricq/json.hpp>
 #include <metricq/sink.hpp>
 
-#include <vector>
+#include <functional>
 
 namespace metricq
 {
@@ -43,7 +43,8 @@ public:
     Db(const std::string& token);
 
 protected:
-    virtual HistoryResponse on_history(const std::string& id, const HistoryRequest& content) = 0;
+    virtual void on_history(const std::string& id, const HistoryRequest& content,
+                            std::function<void(const HistoryResponse&)>& respond) = 0;
     // returns the metrics to subscribe to
     virtual json on_db_config(const json& config) = 0;
     virtual void on_db_ready() = 0;
@@ -57,6 +58,13 @@ private:
     void db_subscribe(const json& metrics);
 
 protected:
+    /**
+     * Call this after your configuration is complete
+     * TODO find good name
+     */
+    void setup_history_queue();
+    void setup_history_queue(const AMQP::QueueCallback& callback);
+    void config(const json& config);
     void on_connected() override;
 
 protected:

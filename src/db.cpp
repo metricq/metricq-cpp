@@ -57,23 +57,24 @@ void Db::on_history(const AMQP::Message& incoming_message)
     history_request_.Clear();
     history_request_.ParseFromString(message_string);
 
-    auto begin = Clock::now();
+    auto correlation_id = incoming_message.correlationID();
+    auto reply_to = incoming_message.replyTo();
+    // believe it or not, auto doesn't work here
+    // no I don't understand why there is
+    // no known conversion for argument 3 from
+    // ‘metricq::Db::on_history(const AMQP::Message&)
+    // ::<lambda(const metricq::HistoryResponse&)>’
+    // to ‘std::function<void(const metricq::HistoryResponse&)>&’
+    std::function<void(const metricq::HistoryResponse&)> respond =
+        [this, correlation_id, reply_to](const HistoryResponse& response) {
+            std::string reply_message = response.SerializeAsString();
+            AMQP::Envelope envelope(reply_message.data(), reply_message.size());
+            envelope.setCorrelationID(correlation_id);
+            envelope.setContentType("application/json");
 
-    auto response = on_history(metric_name, history_request_);
-
-    auto duration = Clock::now() - begin;
-
-    AMQP::Table headers;
-    headers["x-request-duration"] = std::to_string(duration.count());
-
-    std::string reply_message = response.SerializeAsString();
-    AMQP::Envelope envelope(reply_message.data(), reply_message.size());
-    envelope.setHeaders(headers);
-    envelope.setCorrelationID(incoming_message.correlationID());
-    envelope.setAppID(token());
-    envelope.setContentType("application/json");
-
-    data_channel_->publish("", incoming_message.replyTo(), envelope);
+            data_channel_->publish("", reply_to, envelope);
+        };
+    on_history(metric_name, history_request_, respond);
 }
 
 void Db::on_connected()
@@ -91,7 +92,10 @@ void Db::on_register_response(const json& response)
 
     auto subscribe_metrics = on_db_config(response["config"]);
     db_subscribe(subscribe_metrics);
+}
 
+void Db::setup_history_queue()
+{
     setup_history_queue([this](const std::string& name, int message_count, int consumer_count) {
         log::notice("setting up history queue, messages {}, consumers {}", message_count,
                     consumer_count);
