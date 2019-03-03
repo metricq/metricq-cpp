@@ -70,6 +70,7 @@ void Transformer::subscribe_metrics()
             if (this->data_queue_.empty())
             {
                 this->sink_config(response);
+                this->setup_data_queue();
             }
             if (this->data_queue_ != response.at("dataQueue"))
             {
