@@ -80,7 +80,7 @@ protected:
 private:
     void on_register_response(const json& response);
 
-private:
+protected:
     std::string data_exchange_;
     std::unordered_map<std::string, Metric> metrics_;
 };

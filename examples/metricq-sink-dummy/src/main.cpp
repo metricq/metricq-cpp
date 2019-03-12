@@ -106,7 +106,13 @@ int main(int argc, char* argv[])
                        options.as<std::size_t>("count"));
         Log::info() << "starting main loop.";
         sink.main_loop();
-        Log::info() << "exiting main loop.";
+        auto end = metricq::Clock::now();
+        Log::debug() << "exiting main loop.";
+        auto seconds =
+            std::chrono::duration_cast<std::chrono::duration<double>>(end - sink.first_metric_time)
+                .count();
+        Log::info() << "received " << sink.message_count << " values total " << seconds << ": "
+                    << (sink.message_count / seconds) << " values/s";
     }
     catch (nitro::broken_options::parsing_error& e)
     {
