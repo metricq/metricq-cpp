@@ -13,3 +13,6 @@
 [submodule "lib/date"]
 	path = lib/date
 	url = https://github.com/HowardHinnant/date.git
+[submodule "lib/metricq-protobuf"]
+	path = lib/metricq-protobuf
+	url = https://github.com/metricq/metricq-protobuf.git

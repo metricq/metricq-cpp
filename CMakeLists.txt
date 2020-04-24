@@ -20,23 +20,23 @@ independent code" ${METRICQ_POSITION_INDEPENDENT_CODE})
 
 add_subdirectory(lib)
 
-protobuf_generate_cpp(PROTO_SRC PROTO_HEADER src/datachunk.proto src/history.proto)
-add_library(metricq-messages ${PROTO_SRC})
+protobuf_generate_cpp(PROTO_SRC PROTO_HEADER lib/metricq-protobuf/datachunk.proto lib/metricq-protobuf/history.proto)
+add_library(metricq-protobuf ${PROTO_SRC})
 #this is needed to get the generated protobuf files in a sane location : (
-add_custom_command(TARGET metricq-messages PRE_BUILD
+add_custom_command(TARGET metricq-protobuf PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
     COMMAND ${CMAKE_COMMAND} -E copy ${PROTO_HEADER} ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
     COMMENT "Copy generated protobuf headers..."
 )
-target_include_directories(metricq-messages
+target_include_directories(metricq-protobuf
     INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
 )
-target_link_libraries(metricq-messages PUBLIC protobuf::libprotobuf)
-set_target_properties(metricq-messages PROPERTIES
+target_link_libraries(metricq-protobuf PUBLIC protobuf::libprotobuf)
+set_target_properties(metricq-protobuf PROPERTIES
     POSITION_INDEPENDENT_CODE ${METRICQ_POSITION_INDEPENDENT_CODE}
 )
-target_compile_features(metricq-messages PRIVATE cxx_std_14)
+target_compile_features(metricq-protobuf PRIVATE cxx_std_14)
 
 set(CORE_SRCS
     src/chrono.cpp
@@ -65,7 +65,7 @@ target_link_libraries(metricq-core
         asio::asio
         amqpcpp::amqpcpp
         json::json
-        metricq::messages
+        metricq::protobuf
     PRIVATE
         fmt::fmt-header-only
 )
@@ -151,7 +151,7 @@ add_library(metricq::sink ALIAS metricq-sink)
 add_library(metricq::transformer ALIAS metricq-transformer)
 add_library(metricq::db ALIAS metricq-db)
 add_library(metricq::history ALIAS metricq-history)
-add_library(metricq::messages ALIAS metricq-messages)
+add_library(metricq::protobuf ALIAS metricq-protobuf)
 
 
 target_compile_options(metricq-core
@@ -196,7 +196,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     set_target_properties(metricq-sink PROPERTIES EXPORT_NAME sink)
     set_target_properties(metricq-transformer PROPERTIES EXPORT_NAME transformer)
     set_target_properties(metricq-db PROPERTIES EXPORT_NAME db)
-    set_target_properties(metricq-messages PROPERTIES EXPORT_NAME messages)
+    set_target_properties(metricq-protobuf PROPERTIES EXPORT_NAME messages)
 
     install(
         TARGETS
@@ -207,7 +207,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             metricq-transformer
             metricq-db
             metricq-history
-            metricq-messages
+            metricq-protobuf
         EXPORT metricqTargets
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -245,18 +245,10 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     if(DOCKER_CMD)
         message(STATUS "Docker found. Build metricq images with 'make docker'.")
 
-        add_custom_target(docker-python
-            COMMAND docker build -t metricq-python -f ${CMAKE_SOURCE_DIR}/Dockerfile-python ${CMAKE_SOURCE_DIR}
-            COMMENT "Building metricq-python docker image"
-        )
-
-        add_custom_target(docker-cxx
-            COMMAND docker build -t metricq-cxx -f ${CMAKE_SOURCE_DIR}/Dockerfile-cxx ${CMAKE_SOURCE_DIR}
+        add_custom_target(docker
+            COMMAND docker build -t metricq-cpp ${CMAKE_SOURCE_DIR}
             COMMENT "Building metricq-cxx docker image"
         )
-
-
-        add_custom_target(docker DEPENDS docker-python docker-cxx)
     else()
         message(STATUS "Docker not found. SKIPPING.")
     endif()
