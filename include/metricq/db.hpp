@@ -30,7 +30,7 @@
 #pragma once
 
 #include <metricq/history.pb.h>
-#include <metricq/json.hpp>
+#include <metricq/json_fwd.hpp>
 #include <metricq/sink.hpp>
 
 #include <functional>
@@ -59,7 +59,7 @@ protected:
         friend class Db;
 
     private:
-        ConfigCompletion(Db& self, bool initial) : self(self), initial(initial)
+        ConfigCompletion(Db& self) : self(self)
         {
         }
 
@@ -69,12 +69,10 @@ protected:
         ConfigCompletion& operator=(const ConfigCompletion&) = delete;
         ConfigCompletion& operator=(ConfigCompletion&&) = delete;
 
-        // We take by value so we can move around without worrying about lifetime when dispatcing
-        void operator()(json subscribe_metrics);
+        void operator()();
 
     private:
         Db& self;
-        bool initial;
     };
 
     class HistoryCompletion
@@ -134,11 +132,6 @@ protected:
 
 private:
     void on_history(const AMQP::Message&);
-    void setup_history_queue(const AMQP::QueueCallback& callback);
-    void on_register_response(const json& response);
-    // We keep this private to avoid confusion because this is done automatically through return of
-    // on_db_config
-    void db_subscribe(const json& metrics);
 
     void setup_history_queue();
     void setup_history_queue(const AMQP::QueueCallback& callback);

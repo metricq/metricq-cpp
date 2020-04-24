@@ -41,11 +41,7 @@ namespace metricq
 Db::Db(const std::string& token) : Sink(token)
 {
     register_management_callback("config", [this](const json& config) {
-        on_db_config(config, ConfigCompletion(*this, false));
-        // Unfortunately we must send the response now because of how the management callback stuff
-        // is working. Technically, a threaded DB could wait for the event of another thread here.
-        // Hopefully ... coroutines soon
-        // Subscription is handled by the completion
+        on_db_config(config);
         return json::object();
     });
 }
@@ -64,21 +60,15 @@ void Db::on_db_config(const metricq::json&)
 
 void Db::on_db_config(const metricq::json& config, metricq::Db::ConfigCompletion complete)
 {
-    complete(on_db_config(config));
+    on_db_config(config);
+    complete();
 }
 
-void Db::ConfigCompletion::operator()(json subscribe_metrics)
+void Db::ConfigCompletion::operator()()
 {
-    auto run = [& self = this->self, initial = this->initial,
-                subscribe_metrics = std::move(subscribe_metrics)]() {
-        if (initial)
-        {
-            self.setup_data_queue();
-            self.setup_history_queue();
-        }
-        // We don't respond to the config RPC here, that's done int he RPC handler already
-        // No async there...
-        self.db_subscribe(subscribe_metrics);
+    auto run = [& self = this->self]() {
+        self.setup_data_queue();
+        self.setup_history_queue();
     };
     asio::dispatch(self.io_service, run);
 }
@@ -121,6 +111,7 @@ void Db::HistoryCompletion::operator()(const metricq::HistoryResponse& response)
         AMQP::Envelope envelope(reply_message.data(), reply_message.size());
         envelope.setCorrelationID(correlation_id);
         envelope.setContentType("application/json");
+        envelope.setAppID(self.token());
         headers["x-request-duration"] = std::to_string(
             std::chrono::duration_cast<std::chrono::duration<double>>(handling_duration).count());
         headers["x-processing-duration"] = std::to_string(
@@ -133,18 +124,18 @@ void Db::HistoryCompletion::operator()(const metricq::HistoryResponse& response)
 
 void Db::on_connected()
 {
-    rpc("db.register", [this](const auto& response) { on_register_response(response); });
+    rpc("db.register", [this](const auto& response) { config(response); });
 }
 
-void Db::on_register_response(const json& response)
+void Db::config(const json& config)
 {
     log::debug("start parsing config");
 
-    sink_config(response);
+    sink_config(config);
 
-    history_queue_ = response["historyQueue"];
+    history_queue_ = config["historyQueue"];
 
-    on_db_config(response["config"], ConfigCompletion(*this, true));
+    on_db_config(config["config"], ConfigCompletion(*this));
 }
 
 void Db::setup_history_queue()
@@ -176,26 +167,5 @@ void Db::setup_history_queue()
     });
 
     on_db_ready();
-}
-
-void Db::db_subscribe(const json& metrics)
-{
-    // TODO reduce redundancy with Sink::subscribe
-    rpc("db.subscribe",
-        [this](const json& response) {
-            if (this->data_queue_.empty() || this->history_queue_.empty())
-            {
-                // Data queue should really be filled already by the db.register
-                throw std::runtime_error(
-                    "data_queue or history_queue empty upon db.subscribe return");
-            }
-            if (this->data_queue_ != response.at("dataQueue") ||
-                this->history_queue_ != response.at("historyQueue"))
-            {
-                throw std::runtime_error(
-                    "inconsistent dataQueue or historyQueue from db.subscribe");
-            }
-        },
-        { { "metrics", metrics }, { "metadata", false } });
 }
 } // namespace metricq

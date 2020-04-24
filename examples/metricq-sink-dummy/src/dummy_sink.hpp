@@ -59,11 +59,13 @@ private:
 
     std::vector<std::string> metrics_;
 
-    metricq::Duration timeout_;
-    std::size_t expected_chunk_count_;
-
+public:
     metricq::TimePoint first_metric_time;
     std::size_t message_count = 0;
+
+private:
+    metricq::Duration timeout_;
+    std::size_t expected_chunk_count_;
 
     std::size_t message_count_last_step_ = 0;
     std::size_t chunk_count_ = 0;
