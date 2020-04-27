@@ -30,7 +30,7 @@
 #pragma once
 
 #include <metricq/history.pb.h>
-#include <metricq/json_fwd.hpp>
+#include <metricq/json.hpp>
 #include <metricq/sink.hpp>
 
 #include <functional>
@@ -59,7 +59,7 @@ protected:
         friend class Db;
 
     private:
-        ConfigCompletion(Db& self) : self(self)
+        ConfigCompletion(Db& self, bool initial) : self(self), initial(initial)
         {
         }
 
@@ -69,10 +69,12 @@ protected:
         ConfigCompletion& operator=(const ConfigCompletion&) = delete;
         ConfigCompletion& operator=(ConfigCompletion&&) = delete;
 
-        void operator()();
+        // We take by value so we can move around without worrying about lifetime when dispatcing
+        void operator()(json subscribe_metrics);
 
     private:
         Db& self;
+        bool initial;
     };
 
     class HistoryCompletion
@@ -122,7 +124,8 @@ protected:
      * This can be enforced e.g. by owning all threads in the subclass of Db.
      */
     virtual void on_db_config(const json& config, ConfigCompletion complete);
-    virtual void on_db_config(const json& config);
+    // returns the metrics to subscribe to
+    virtual json on_db_config(const json& config);
 
     virtual void on_history(const std::string& id, const HistoryRequest& content,
                             HistoryCompletion complete);
@@ -136,8 +139,12 @@ private:
     void setup_history_queue();
     void setup_history_queue(const AMQP::QueueCallback& callback);
 
+    void on_register_response(const json& response);
+    // We keep this private to avoid confusion because this is done automatically through return of
+    // on_db_config
+    void db_subscribe(const json& metrics);
+
 protected:
-    void config(const json& config);
     void on_connected() override;
 
 protected:

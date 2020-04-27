@@ -54,7 +54,6 @@ public:
     {
     }
 
-    template <typename Duration>
     void start(Duration interval)
     {
         interval_ = std::chrono::duration_cast<std::chrono::microseconds>(interval);
@@ -71,7 +70,6 @@ public:
         restart();
     }
 
-    template <typename Duration>
     void start(Callback callback, Duration interval)
     {
         callback_ = callback;
