@@ -82,6 +82,10 @@ protected:
     void rpc(const std::string& function, ManagementResponseCallback callback,
              json payload = json({}));
     void register_management_callback(const std::string& function, ManagementCallback callback);
+    void register_management_rpc_response_callback(const std::string& correlation_id,
+                                                   ManagementResponseCallback callback);
+
+    std::unique_ptr<AMQP::Envelope> prepare_rpc_envelop(const std::string& function, json payload);
 
     void stop();
     virtual void close();

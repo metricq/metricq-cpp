@@ -126,21 +126,9 @@ void Connection::register_management_callback(const std::string& function, Manag
     }
 }
 
-void Connection::rpc(const std::string& function, ManagementResponseCallback response_callback,
-                     json payload)
+void Connection::register_management_rpc_response_callback(
+    const std::string& correlation_id, ManagementResponseCallback response_callback)
 {
-    log::debug("management rpc sending {}", function);
-    payload["function"] = function;
-    std::string message = payload.dump();
-    AMQP::Envelope envelope(message.data(), message.size());
-
-    auto correlation_id = std::string("metricq-rpc-") + connection_token_ + "-" + uuid();
-    envelope.setCorrelationID(correlation_id);
-    envelope.setAppID(connection_token_);
-    assert(!management_client_queue_.empty());
-    envelope.setReplyTo(management_client_queue_);
-    envelope.setContentType("application/json");
-
     auto ret =
         management_rpc_response_callbacks_.emplace(correlation_id, std::move(response_callback));
     if (!ret.second)
@@ -151,8 +139,38 @@ void Connection::rpc(const std::string& function, ManagementResponseCallback res
         throw std::invalid_argument(
             "trying to register management RPC response callback that is already registered");
     }
+}
 
-    management_channel_->publish(management_exchange_, function, envelope);
+std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelop(const std::string& function,
+                                                                json payload)
+{
+    payload["function"] = function;
+    std::string message = payload.dump();
+    auto envelope = std::make_unique<AMQP::Envelope>(message.data(), message.size());
+
+    auto correlation_id = std::string("metricq-rpc-") + connection_token_ + "-" + uuid();
+
+    envelope->setCorrelationID(std::move(correlation_id));
+    envelope->setAppID(connection_token_);
+    envelope->setContentType("application/json");
+
+    assert(!management_client_queue_.empty());
+    envelope->setReplyTo(management_client_queue_);
+
+    return envelope;
+}
+
+void Connection::rpc(const std::string& function, ManagementResponseCallback response_callback,
+                     json payload)
+{
+    log::debug("management rpc sending {}", function);
+
+    auto envelope = prepare_rpc_envelop(function, std::move(payload));
+
+    register_management_rpc_response_callback(envelope->correlationID(),
+                                              std::move(response_callback));
+
+    management_channel_->publish(management_exchange_, function, *envelope);
 }
 
 void Connection::handle_management_message(const AMQP::Message& incoming_message,
