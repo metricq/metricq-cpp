@@ -36,19 +36,15 @@
 #include "log.hpp"
 #include "util.hpp"
 
+#include <functional>
+
+using namespace std::placeholders;
+
 namespace metricq
 {
 HistoryClient::HistoryClient(const std::string& token, bool add_uuid) : Connection(token, add_uuid)
 {
-    register_management_callback("discover", [starting_time = Clock::now()](const json&) -> json {
-        auto current_time = Clock::now();
-        auto uptime = (current_time - starting_time).count(); // current uptime in nanoseconds
-
-        return { { "alive", true },
-                 { "currentTime", Clock::format_iso(current_time) },
-                 { "startingTime", Clock::format_iso(starting_time) },
-                 { "uptime", uptime } };
-    });
+    register_rpc_callback("discover", std::bind(&HistoryClient::on_discover, this, _1));
 }
 
 HistoryClient::~HistoryClient() = default;
@@ -204,6 +200,17 @@ void HistoryClient::on_history_response(const std::string& id, const HistoryResp
     {
         on_history_response(id, HistoryResponseAggregateView(response));
     }
+}
+
+json HistoryClient::on_discover(const json&)
+{
+    auto current_time = Clock::now();
+    auto uptime = (current_time - starting_time_).count();
+
+    return { { "alive", true },
+             { "currentTime", Clock::format_iso(current_time) },
+             { "startingTime", Clock::format_iso(starting_time_) },
+             { "uptime", uptime } };
 }
 
 } // namespace metricq

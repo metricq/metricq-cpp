@@ -114,9 +114,9 @@ void Connection::connect(const std::string& server_address)
         });
 }
 
-void Connection::register_management_callback(const std::string& function, ManagementCallback cb)
+void Connection::register_rpc_callback(const std::string& function, RPCCallback cb)
 {
-    auto ret = management_callbacks_.emplace(function, std::move(cb));
+    auto ret = rpc_callbacks_.emplace(function, std::move(cb));
     if (!ret.second)
     {
         log::error("trying to register management callback that is already registered: {}",
@@ -126,11 +126,12 @@ void Connection::register_management_callback(const std::string& function, Manag
     }
 }
 
-void Connection::register_management_rpc_response_callback(
-    const std::string& correlation_id, ManagementResponseCallback response_callback)
+void Connection::register_rpc_response_callback(const std::string& correlation_id,
+                                                RPCResponseCallback callback)
 {
     auto ret =
-        management_rpc_response_callbacks_.emplace(correlation_id, std::move(response_callback));
+        rpc_response_callbacks_.emplace(std::piecewise_construct, std::make_tuple(correlation_id),
+                                        std::make_tuple(std::ref(io_service), std::move(callback)));
     if (!ret.second)
     {
         log::error(
@@ -141,11 +142,14 @@ void Connection::register_management_rpc_response_callback(
     }
 }
 
-std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelop(const std::string& function,
-                                                                json payload)
+std::string Connection::prepare_message(const std::string& function, json payload)
 {
     payload["function"] = function;
-    std::string message = payload.dump();
+    return payload.dump();
+}
+
+std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelop(const std::string& message)
+{
     auto envelope = std::make_unique<AMQP::Envelope>(message.data(), message.size());
 
     auto correlation_id = std::string("metricq-rpc-") + connection_token_ + "-" + uuid();
@@ -160,15 +164,14 @@ std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelop(const std::strin
     return envelope;
 }
 
-void Connection::rpc(const std::string& function, ManagementResponseCallback response_callback,
-                     json payload)
+void Connection::rpc(const std::string& function, RPCResponseCallback callback, json payload)
 {
-    log::debug("management rpc sending {}", function);
+    log::debug("sending rpc: {}", function);
 
-    auto envelope = prepare_rpc_envelop(function, std::move(payload));
+    auto message = prepare_message(function, std::move(payload));
+    auto envelope = prepare_rpc_envelop(message);
 
-    register_management_rpc_response_callback(envelope->correlationID(),
-                                              std::move(response_callback));
+    register_rpc_response_callback(envelope->correlationID(), std::move(callback));
 
     management_channel_->publish(management_exchange_, function, *envelope);
 }
@@ -184,14 +187,15 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 
     auto acknowledge = finally([this, deliveryTag]() { management_channel_->ack(deliveryTag); });
 
-    if (auto it = management_rpc_response_callbacks_.find(incoming_message.correlationID());
-        it != management_rpc_response_callbacks_.end())
+    if (auto it = rpc_response_callbacks_.find(incoming_message.correlationID());
+        it != rpc_response_callbacks_.end())
     {
         // Incoming message is a RPC-response, call the response handler
         if (content.count("error"))
         {
             log::error("management rpc failed: {}. stopping", content["error"].get<std::string>());
             acknowledge.invoke();
+            rpc_response_callbacks_.clear();
             stop();
             return;
         }
@@ -222,14 +226,14 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
         }
 
         // we must search again because the handler might have invalidated the iterator
-        it = management_rpc_response_callbacks_.find(incoming_message.correlationID());
-        if (it == management_rpc_response_callbacks_.end())
+        it = rpc_response_callbacks_.find(incoming_message.correlationID());
+        if (it == rpc_response_callbacks_.end())
         {
             log::error("error in rpc response handling {}: response callback vanished",
                        incoming_message.correlationID());
             throw RPCError();
         }
-        management_rpc_response_callbacks_.erase(it);
+        rpc_response_callbacks_.erase(it);
         return;
     }
 
@@ -242,7 +246,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 
     auto function = content.at("function").get<std::string>();
 
-    if (auto it = management_callbacks_.find(function); it != management_callbacks_.end())
+    if (auto it = rpc_callbacks_.find(function); it != rpc_callbacks_.end())
     {
         log::debug("management rpc call received: {}", content_str);
         // incoming message is a RPC-call

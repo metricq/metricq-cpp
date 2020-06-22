@@ -29,9 +29,14 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
+#include <metricq/chrono.hpp>
 #include <metricq/connection.hpp>
 
 #include <amqpcpp.h>
+
+#include <memory>
+#include <optional>
+#include <string>
 
 namespace metricq
 {
@@ -52,8 +57,13 @@ protected:
     void close() override;
 
 private:
+    void open_data_connection();
+    json on_discover(const json&);
+
     std::optional<AMQP::Address> data_server_address_;
     std::unique_ptr<BaseConnectionHandler> data_connection_;
+
+    metricq::TimePoint starting_time_ = Clock::now();
 
 protected:
     std::unique_ptr<AMQP::Channel> data_channel_;

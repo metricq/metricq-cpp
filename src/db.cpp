@@ -36,7 +36,7 @@ namespace metricq
 {
 Db::Db(const std::string& token) : Sink(token)
 {
-    register_management_callback("config", [this](const json& config) {
+    register_rpc_callback("config", [this](const json& config) {
         auto subscribe_metrics = on_db_config(config);
         this->subscribe(subscribe_metrics);
         return json::object();
