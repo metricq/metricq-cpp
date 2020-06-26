@@ -352,7 +352,7 @@ private:
     const HistoryResponse& hr_;
 };
 
-class HistoryResponseAggregateView : public HistoryResponse
+class HistoryResponseAggregateView
 {
 public:
     explicit HistoryResponseAggregateView(const HistoryResponse& hr) : hr_(hr)
