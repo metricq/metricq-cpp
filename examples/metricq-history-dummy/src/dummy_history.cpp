@@ -115,8 +115,7 @@ void DummyHistory::on_history_response(const std::string& id,
 {
     Log::debug() << "DummyHistory::on_history_response() called";
 
-    Log::info() << "Got HistoryResponseAggregate for metric: " << view.metric() << "(" << id
-                << ")";
+    Log::info() << "Got HistoryResponseAggregate for metric: " << view.metric() << "(" << id << ")";
 
     for (auto tva : view)
     {

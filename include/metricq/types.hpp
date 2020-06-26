@@ -337,7 +337,6 @@ public:
         return hr_.metric();
     }
 
-
     inline HistoryResponseValueIterator begin() const
     {
         return { hr_.time_delta().begin(), hr_.value().begin() };
