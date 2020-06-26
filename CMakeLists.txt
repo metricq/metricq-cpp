@@ -20,14 +20,28 @@ independent code" ${METRICQ_POSITION_INDEPENDENT_CODE})
 
 add_subdirectory(lib)
 
-protobuf_generate_cpp(PROTO_SRC PROTO_HEADER lib/metricq-protobuf/datachunk.proto lib/metricq-protobuf/history.proto)
-add_library(metricq-protobuf ${PROTO_SRC})
+set(PROTO_FILES lib/metricq-protobuf/datachunk.proto lib/metricq-protobuf/history.proto)
+protobuf_generate_cpp(PROTO_SRC PROTO_HEADER ${PROTO_FILES})
 #this is needed to get the generated protobuf files in a sane location : (
-add_custom_command(TARGET metricq-protobuf PRE_BUILD
+add_custom_command(
+    OUTPUT
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/history.pb.h
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/datachunk.pb.h
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    DEPENDS ${PROTO_FILES} ${PROTO_HEADER}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
     COMMAND ${CMAKE_COMMAND} -E copy ${PROTO_HEADER} ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
     COMMENT "Copy generated protobuf headers..."
 )
+add_custom_target(metricq-protobuf-move-headers ALL
+    DEPENDS
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/history.pb.h
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/datachunk.pb.h
+)
+
+add_library(metricq-protobuf ${PROTO_SRC})
+add_dependencies(metricq-protobuf metricq-protobuf-move-headers)
 target_include_directories(metricq-protobuf
     INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
