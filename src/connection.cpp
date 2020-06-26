@@ -127,11 +127,11 @@ void Connection::register_rpc_callback(const std::string& function, RPCCallback 
 }
 
 void Connection::register_rpc_response_callback(const std::string& correlation_id,
-                                                RPCResponseCallback callback)
+                                                RPCResponseCallback callback, Duration timeout)
 {
-    auto ret =
-        rpc_response_callbacks_.emplace(std::piecewise_construct, std::make_tuple(correlation_id),
-                                        std::make_tuple(std::ref(io_service), std::move(callback)));
+    auto ret = rpc_response_callbacks_.emplace(
+        std::piecewise_construct, std::make_tuple(correlation_id),
+        std::make_tuple(std::ref(io_service), std::move(callback), timeout));
     if (!ret.second)
     {
         log::error(
@@ -164,14 +164,15 @@ std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelop(const std::strin
     return envelope;
 }
 
-void Connection::rpc(const std::string& function, RPCResponseCallback callback, json payload)
+void Connection::rpc(const std::string& function, RPCResponseCallback callback, json payload,
+                     Duration timeout)
 {
     log::debug("sending rpc: {}", function);
 
     auto message = prepare_message(function, std::move(payload));
     auto envelope = prepare_rpc_envelop(message);
 
-    register_rpc_response_callback(envelope->correlationID(), std::move(callback));
+    register_rpc_response_callback(envelope->correlationID(), std::move(callback), timeout);
 
     management_channel_->publish(management_exchange_, function, *envelope);
 }

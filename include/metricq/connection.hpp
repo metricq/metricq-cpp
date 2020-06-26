@@ -114,10 +114,11 @@ protected:
 
     virtual void on_connected() = 0;
 
-    void rpc(const std::string& function, RPCResponseCallback callback, json payload = json({}));
+    void rpc(const std::string& function, RPCResponseCallback callback, json payload = json({}),
+             Duration timeout = std::chrono::seconds(60));
     void register_rpc_callback(const std::string& function, RPCCallback callback);
     void register_rpc_response_callback(const std::string& correlation_id,
-                                        RPCResponseCallback callback);
+                                        RPCResponseCallback callback, Duration timeout);
 
     std::string prepare_message(const std::string& function, json payload);
     std::unique_ptr<AMQP::Envelope> prepare_rpc_envelop(const std::string& message);
