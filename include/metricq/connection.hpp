@@ -127,10 +127,11 @@ protected:
 
     AMQP::Address derive_address(const std::string& address);
 
+    json handle_discover_rpc(const json&);
+
 private:
     void handle_management_message(const AMQP::Message& incoming_message, uint64_t deliveryTag,
                                    bool redelivered);
-    void handle_broadcast_message(const AMQP::Message& message);
 
 protected:
     asio::io_service io_service;
@@ -148,5 +149,7 @@ private:
     std::string management_queue_ = "management";
     std::string management_exchange_ = "metricq.management";
     std::string management_broadcast_exchange_ = "metricq.broadcast";
+
+    metricq::TimePoint starting_time_ = Clock::now();
 };
 } // namespace metricq

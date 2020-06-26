@@ -42,7 +42,7 @@ namespace metricq
 {
 DataClient::DataClient(const std::string& token, bool add_uuid) : Connection(token, add_uuid)
 {
-    register_rpc_callback("discover", std::bind(&DataClient::on_discover, this, _1));
+    register_rpc_callback("discover", std::bind(&DataClient::handle_discover_rpc, this, _1));
 }
 
 DataClient::~DataClient() = default;
@@ -110,17 +110,6 @@ void DataClient::close()
 
 void DataClient::on_data_channel_ready()
 {
-}
-
-json DataClient::on_discover(const json&)
-{
-    auto current_time = Clock::now();
-    auto uptime = (current_time - starting_time_).count();
-
-    return { { "alive", true },
-             { "currentTime", Clock::format_iso(current_time) },
-             { "startingTime", Clock::format_iso(starting_time_) },
-             { "uptime", uptime } };
 }
 
 } // namespace metricq

@@ -65,7 +65,6 @@ protected:
 
 private:
     void on_history_response(const AMQP::Message&);
-    json on_discover(const json&);
 
 protected:
     void setup_history_queue(const AMQP::QueueCallback& callback);
@@ -90,8 +89,5 @@ private:
 
 protected:
     std::unique_ptr<AMQP::Channel> history_channel_;
-
-private:
-    metricq::TimePoint starting_time_ = Clock::now();
 };
 } // namespace metricq

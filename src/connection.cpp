@@ -321,4 +321,16 @@ void Connection::stop()
     close();
     // the io_service will stop itself once all connections are closed
 }
+
+json Connection::handle_discover_rpc(const json&)
+{
+    auto current_time = Clock::now();
+    auto uptime = (current_time - starting_time_).count();
+
+    return { { "alive", true },
+             { "currentTime", Clock::format_iso(current_time) },
+             { "startingTime", Clock::format_iso(starting_time_) },
+             { "uptime", uptime } };
+}
+
 } // namespace metricq

@@ -58,12 +58,9 @@ protected:
 
 private:
     void open_data_connection();
-    json on_discover(const json&);
 
     std::optional<AMQP::Address> data_server_address_;
     std::unique_ptr<BaseConnectionHandler> data_connection_;
-
-    metricq::TimePoint starting_time_ = Clock::now();
 
 protected:
     std::unique_ptr<AMQP::Channel> data_channel_;
