@@ -198,11 +198,11 @@ void HistoryClient::on_history_response(const std::string& id, const HistoryResp
 {
     if (response.value_size() > 0)
     {
-        on_history_response(id, *static_cast<const HistoryResponseValueView*>(&response));
+        on_history_response(id, HistoryResponseValueView(response));
     }
     else
     {
-        on_history_response(id, *static_cast<const HistoryResponseAggregateView*>(&response));
+        on_history_response(id, HistoryResponseAggregateView(response));
     }
 }
 
