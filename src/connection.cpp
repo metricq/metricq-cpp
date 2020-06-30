@@ -119,10 +119,8 @@ void Connection::register_rpc_callback(const std::string& function, RPCCallback 
     auto ret = rpc_callbacks_.emplace(function, std::move(cb));
     if (!ret.second)
     {
-        log::error("trying to register management callback that is already registered: {}",
-                   function);
-        throw std::invalid_argument(
-            "trying to register management callback that is already registered");
+        log::error("trying to register RPC callback that is already registered: {}", function);
+        throw std::invalid_argument("trying to register RPC callback that is already registered");
     }
 }
 
@@ -134,21 +132,25 @@ void Connection::register_rpc_response_callback(const std::string& correlation_i
         std::make_tuple(std::ref(io_service), std::move(callback), timeout));
     if (!ret.second)
     {
-        log::error(
-            "trying to register management RPC response callback that is already registered: {}",
-            correlation_id);
+        log::error("trying to register RPC response callback that is already registered: {}",
+                   correlation_id);
         throw std::invalid_argument(
-            "trying to register management RPC response callback that is already registered");
+            "trying to register RPC response callback that is already registered");
     }
 }
 
 std::string Connection::prepare_message(const std::string& function, json payload)
 {
+    if (payload.count("function"))
+    {
+        throw std::invalid_argument("Function was already set in payload.");
+    }
+
     payload["function"] = function;
     return payload.dump();
 }
 
-std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelop(const std::string& message)
+std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelope(const std::string& message)
 {
     auto envelope = std::make_unique<AMQP::Envelope>(message.data(), message.size());
 
@@ -170,7 +172,7 @@ void Connection::rpc(const std::string& function, RPCResponseCallback callback, 
     log::debug("sending rpc: {}", function);
 
     auto message = prepare_message(function, std::move(payload));
-    auto envelope = prepare_rpc_envelop(message);
+    auto envelope = prepare_rpc_envelope(message);
 
     register_rpc_response_callback(envelope->correlationID(), std::move(callback), timeout);
 
@@ -326,7 +328,9 @@ void Connection::stop()
 json Connection::handle_discover_rpc(const json&)
 {
     auto current_time = Clock::now();
-    auto uptime = (current_time - starting_time_).count();
+    auto uptime =
+        std::chrono::duration_cast<std::chrono::duration<double>>(current_time - starting_time_)
+            .count();
 
     return { { "alive", true },
              { "currentTime", Clock::format_iso(current_time) },

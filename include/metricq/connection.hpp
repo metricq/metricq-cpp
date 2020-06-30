@@ -121,14 +121,14 @@ protected:
                                         RPCResponseCallback callback, Duration timeout);
 
     std::string prepare_message(const std::string& function, json payload);
-    std::unique_ptr<AMQP::Envelope> prepare_rpc_envelop(const std::string& message);
+    std::unique_ptr<AMQP::Envelope> prepare_rpc_envelope(const std::string& message);
 
     void stop();
     virtual void close();
 
     AMQP::Address derive_address(const std::string& address);
 
-    json handle_discover_rpc(const json&);
+    virtual json handle_discover_rpc(const json&);
 
 private:
     void handle_management_message(const AMQP::Message& incoming_message, uint64_t deliveryTag,
