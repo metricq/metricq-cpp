@@ -38,7 +38,7 @@
 
 namespace metricq
 {
-class BaseConnectionHandler;
+class AsioConnectionHandler;
 class HistoryResponseValueView;
 class HistoryResponseAggregateView;
 
@@ -85,7 +85,7 @@ protected:
 
 private:
     std::optional<AMQP::Address> data_server_address_;
-    std::unique_ptr<BaseConnectionHandler> history_connection_;
+    std::unique_ptr<AsioConnectionHandler> history_connection_;
 
 protected:
     std::unique_ptr<AMQP::Channel> history_channel_;

@@ -44,7 +44,7 @@
 namespace metricq
 {
 
-class BaseConnectionHandler;
+class AsioConnectionHandler;
 
 class Connection
 {
@@ -101,7 +101,7 @@ private:
     std::string connection_token_;
 
     // TODO combine & abstract to extra class
-    std::unique_ptr<BaseConnectionHandler> management_connection_;
+    std::unique_ptr<AsioConnectionHandler> management_connection_;
     std::unique_ptr<AMQP::Channel> management_channel_;
     std::unordered_map<std::string, ManagementCallback> management_callbacks_;
     std::unordered_map<std::string, ManagementResponseCallback> management_rpc_response_callbacks_;

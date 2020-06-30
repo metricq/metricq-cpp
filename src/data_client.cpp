@@ -74,11 +74,11 @@ void DataClient::data_config(const metricq::json& config)
     log::debug("opening data connection to {}", *data_server_address_);
     if (data_server_address_->secure())
     {
-        data_connection_ = std::make_unique<SSLConnectionHandler>(io_service);
+        data_connection_ = std::make_unique<SSLConnectionHandler>(io_service, "Data connection");
     }
     else
     {
-        data_connection_ = std::make_unique<ConnectionHandler>(io_service);
+        data_connection_ = std::make_unique<PlainConnectionHandler>(io_service, "Data connection");
     }
 
     data_connection_->connect(*data_server_address_);

@@ -60,23 +60,24 @@ void QueuedBuffer::consume(std::size_t consumed_bytes)
     }
 }
 
-BaseConnectionHandler::BaseConnectionHandler(asio::io_service& io_service)
-: reconnect_timer_(io_service), heartbeat_timer_(io_service),
-  heartbeat_interval_(std::chrono::seconds(0)), resolver_(io_service)
+AsioConnectionHandler::AsioConnectionHandler(asio::io_service& io_service, const std::string& name)
+: heartbeat_timer_(io_service), heartbeat_interval_(std::chrono::seconds(0)), resolver_(io_service),
+  name_(name)
 {
 }
 
-ConnectionHandler::ConnectionHandler(asio::io_service& io_service)
-: BaseConnectionHandler(io_service), socket_(io_service)
+PlainConnectionHandler::PlainConnectionHandler(asio::io_service& io_service,
+                                               const std::string& name)
+: AsioConnectionHandler(io_service, name), socket_(io_service)
 {
-    log::debug("Using plaintext connection.");
+    log::debug("[{}] Using plaintext connection.", name_);
 }
 
-SSLConnectionHandler::SSLConnectionHandler(asio::io_service& io_service)
-: BaseConnectionHandler(io_service), ssl_context_(asio::ssl::context::tls),
+SSLConnectionHandler::SSLConnectionHandler(asio::io_service& io_service, const std::string& name)
+: AsioConnectionHandler(io_service, name), ssl_context_(asio::ssl::context::tls),
   socket_(io_service, ssl_context_)
 {
-    log::debug("Using SSL-secured connection.");
+    log::debug("[{}] Using SSL-secured connection.", name_);
 
     // Create a context that uses the default paths for finding CA certificates.
     ssl_context_.set_default_verify_paths();
@@ -86,7 +87,7 @@ SSLConnectionHandler::SSLConnectionHandler(asio::io_service& io_service)
                              asio::ssl::context::tlsv12_client);
 }
 
-void BaseConnectionHandler::connect(const AMQP::Address& address)
+void AsioConnectionHandler::connect(const AMQP::Address& address)
 {
     assert(!underlying_socket().is_open());
     assert(!connection_);
@@ -98,31 +99,32 @@ void BaseConnectionHandler::connect(const AMQP::Address& address)
     resolver_.async_resolve(query, [this, address](const auto& error, auto endpoint_iterator) {
         if (error)
         {
-            log::error("failed to resolve hostname {}: {}", address.hostname(), error.message());
+            log::error("[{}] failed to resolve hostname {}: {}", name_, address.hostname(),
+                       error.message());
             this->onError("resolve failed");
             return;
         }
 
         for (auto it = endpoint_iterator; it != decltype(endpoint_iterator)(); ++it)
         {
-            log::debug("resolved {} to {}", address.hostname(), it->endpoint());
+            log::debug("[{}] resolved {} to {}", name_, address.hostname(), it->endpoint());
         }
 
         this->connect(endpoint_iterator);
     });
 }
 
-void BaseConnectionHandler::connect(asio::ip::tcp::resolver::iterator endpoint_iterator)
+void AsioConnectionHandler::connect(asio::ip::tcp::resolver::iterator endpoint_iterator)
 {
     asio::async_connect(this->underlying_socket(), endpoint_iterator,
                         [this](const auto& error, auto successful_endpoint) {
                             if (error)
                             {
-                                log::error("Failed to connect to: {}", error.message());
+                                log::error("[{}] Failed to connect to: {}", name_, error.message());
                                 this->onError("Connect failed");
                                 return;
                             }
-                            log::debug("Established connection to {} at {}",
+                            log::debug("[{}] Established connection to {} at {}", name_,
                                        successful_endpoint->host_name(),
                                        successful_endpoint->endpoint());
 
@@ -130,7 +132,7 @@ void BaseConnectionHandler::connect(asio::ip::tcp::resolver::iterator endpoint_i
                         });
 }
 
-void ConnectionHandler::handshake(const std::string& hostname)
+void PlainConnectionHandler::handshake(const std::string& hostname)
 {
     (void)hostname;
 
@@ -148,9 +150,9 @@ void SSLConnectionHandler::handshake(const std::string& hostname)
         X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
         X509_NAME_oneline(X509_get_subject_name(cert), subject_name, 256);
 
-        log::debug("Visiting certificate for subject: {}", subject_name);
+        log::debug("[{}] Visiting certificate for subject: {}", name_, subject_name);
 
-        log::warn("Skipping certificate verification.");
+        log::warn("[{}] Skipping certificate verification.", name_);
         return true;
     });
 #else
@@ -161,23 +163,23 @@ void SSLConnectionHandler::handshake(const std::string& hostname)
     socket_.async_handshake(asio::ssl::stream_base::client, [this](const auto& error) {
         if (error)
         {
-            log::error("Failed to SSL handshake to: {}", error.message());
+            log::error("[{}] Failed to SSL handshake to: {}", name_, error.message());
             this->onError("SSL handshake failed");
             return;
         }
 
-        log::debug("SSL handshake was successful.");
+        log::debug("[{}] SSL handshake was successful.", name_);
 
         this->read();
         this->flush();
     });
 }
 
-uint16_t BaseConnectionHandler::onNegotiate(AMQP::Connection* connection, uint16_t timeout)
+uint16_t AsioConnectionHandler::onNegotiate(AMQP::Connection* connection, uint16_t timeout)
 {
     (void)connection;
 
-    log::debug("Negotiated heartbeat interval to {} seconds", timeout);
+    log::debug("[{}] Negotiated heartbeat interval to {} seconds", name_, timeout);
 
     // According to https://www.rabbitmq.com/heartbeats.html we actually get the timeout here
     // and we should send a heartbeat every timeout/2. I guess this is an issue in AMQP-CPP
@@ -191,11 +193,11 @@ uint16_t BaseConnectionHandler::onNegotiate(AMQP::Connection* connection, uint16
     return timeout;
 }
 
-void BaseConnectionHandler::onHeartbeat(AMQP::Connection* connection)
+void AsioConnectionHandler::onHeartbeat(AMQP::Connection* connection)
 {
     (void)connection;
 
-    log::trace("Received heartbeat from server");
+    log::trace("[{}] Received heartbeat from server", name_);
 }
 
 /**
@@ -205,7 +207,7 @@ void BaseConnectionHandler::onHeartbeat(AMQP::Connection* connection)
  *  @param  data        memory buffer with the data that should be sent to RabbitMQ
  *  @param  size        size of the buffer
  */
-void BaseConnectionHandler::onData(AMQP::Connection* connection, const char* data, size_t size)
+void AsioConnectionHandler::onData(AMQP::Connection* connection, const char* data, size_t size)
 {
     (void)connection;
 
@@ -219,10 +221,10 @@ void BaseConnectionHandler::onData(AMQP::Connection* connection, const char* dat
  *  to use.
  *  @param  connection      The connection that can now be used
  */
-void BaseConnectionHandler::onReady(AMQP::Connection* connection)
+void AsioConnectionHandler::onReady(AMQP::Connection* connection)
 {
     (void)connection;
-    log::debug("ConnectionHandler::onReady");
+    log::debug("[{}] ConnectionHandler::onReady", name_);
 }
 
 /**
@@ -232,10 +234,10 @@ void BaseConnectionHandler::onReady(AMQP::Connection* connection)
  *  @param  connection      The connection on which the error occurred
  *  @param  message         A human readable error message
  */
-void BaseConnectionHandler::onError(AMQP::Connection* connection, const char* message)
+void AsioConnectionHandler::onError(AMQP::Connection* connection, const char* message)
 {
     (void)connection;
-    log::debug("ConnectionHandler::onError: {}", message);
+    log::debug("[{}] ConnectionHandler::onError: {}", name_, message);
     if (error_callback_)
     {
         error_callback_(message);
@@ -284,10 +286,10 @@ void BaseConnectionHandler::onError(AMQP::Connection* connection, const char* me
  *
  *  @param  connection      The connection that was closed and that is now unusable
  */
-void BaseConnectionHandler::onClosed(AMQP::Connection* connection)
+void AsioConnectionHandler::onClosed(AMQP::Connection* connection)
 {
     (void)connection;
-    log::debug("ConnectionHandler::onClosed");
+    log::debug("[{}] ConnectionHandler::onClosed", name_);
 
     // Technically, there is a ssl_shutdown method for the stream.
     // But, it seems that we don't have to do that (⊙.☉)7
@@ -311,8 +313,9 @@ void BaseConnectionHandler::onClosed(AMQP::Connection* connection)
         // place
 
         // I can't do shit here:
-        log::warn("During the close of the connection, there is still data to send in the buffers. "
-                  "This will blow up soon. I told ya so.");
+        log::warn("[{}] During the close of the connection, there is still data to send in the "
+                  "buffers. This will blow up soon. I told ya so.",
+                  name_);
     }
 
     // this technically invalidates all existing channel objects. Those objects are the hard part
@@ -325,8 +328,7 @@ void BaseConnectionHandler::onClosed(AMQP::Connection* connection)
     }
 }
 
-// TODO check if this return code makes any sense
-bool BaseConnectionHandler::close()
+bool AsioConnectionHandler::close()
 {
     if (!connection_)
     {
@@ -336,12 +338,12 @@ bool BaseConnectionHandler::close()
     return true;
 }
 
-void BaseConnectionHandler::read()
+void AsioConnectionHandler::read()
 {
     this->async_read_some([this](const auto& error, auto received_bytes) {
         if (error)
         {
-            log::error("read failed: {}", error.message());
+            log::error("[{}] read failed: {}", name_, error.message());
             if (this->connection_)
             {
                 this->connection_->fail(error.message().c_str());
@@ -349,6 +351,10 @@ void BaseConnectionHandler::read()
             this->onError("read failed");
             return;
         }
+
+        log::trace("[{}] Successfully received {} bytes through the socket. Waiting for at least "
+                   "{} bytes.",
+                   name_, received_bytes, connection_->expected());
 
         assert(this->connection_);
         this->recv_buffer_.commit(received_bytes);
@@ -367,6 +373,8 @@ void BaseConnectionHandler::read()
 
             auto consumed = connection_->parse(begin, size);
             this->recv_buffer_.consume(consumed);
+
+            log::trace("[{}] Consumed {} of {} bytes.", name_, consumed, received_bytes);
         }
 
         if (this->underlying_socket().is_open())
@@ -376,7 +384,7 @@ void BaseConnectionHandler::read()
     });
 }
 
-void BaseConnectionHandler::flush()
+void AsioConnectionHandler::flush()
 {
     if (!underlying_socket().is_open() || send_buffers_.empty() || flush_in_progress_)
     {
@@ -388,7 +396,7 @@ void BaseConnectionHandler::flush()
     this->async_write_some([this](const auto& error, auto transferred) {
         if (error)
         {
-            log::error("write failed: {}", error.message());
+            log::error("[{}] write failed: {}", name_, error.message());
             if (this->connection_)
             {
                 this->connection_->fail(error.message().c_str());
@@ -397,6 +405,8 @@ void BaseConnectionHandler::flush()
             return;
         }
 
+        log::trace("[{}] Completed to send {} bytes through the socket", name_, transferred);
+
         this->send_buffers_.consume(transferred);
 
         if (heartbeat_interval_.count() != 0 && this->underlying_socket().is_open())
@@ -404,6 +414,8 @@ void BaseConnectionHandler::flush()
             // we completed a send operation. Now it's time to set up the heartbeat timer.
             this->heartbeat_timer_.expires_after(this->heartbeat_interval_);
             this->heartbeat_timer_.async_wait([this](const auto& error) { this->beat(error); });
+
+            log::trace("[{}] Schedule heartbeat timer in flush callback", name_);
         }
 
         this->flush_in_progress_ = false;
@@ -411,12 +423,12 @@ void BaseConnectionHandler::flush()
     });
 }
 
-void ConnectionHandler::async_write_some(std::function<void(std::error_code, std::size_t)> cb)
+void PlainConnectionHandler::async_write_some(std::function<void(std::error_code, std::size_t)> cb)
 {
     socket_.async_write_some(send_buffers_.front(), cb);
 }
 
-void ConnectionHandler::async_read_some(std::function<void(std::error_code, std::size_t)> cb)
+void PlainConnectionHandler::async_read_some(std::function<void(std::error_code, std::size_t)> cb)
 {
     assert(this->connection_);
     socket_.async_read_some(asio::buffer(recv_buffer_.prepare(connection_->maxFrame() * 32)), cb);
@@ -433,7 +445,7 @@ void SSLConnectionHandler::async_read_some(std::function<void(std::error_code, s
     socket_.async_read_some(asio::buffer(recv_buffer_.prepare(connection_->maxFrame() * 32)), cb);
 }
 
-void BaseConnectionHandler::beat(const asio::error_code& error)
+void AsioConnectionHandler::beat(const asio::error_code& error)
 {
     if (error && error == asio::error::operation_aborted)
     {
@@ -444,7 +456,7 @@ void BaseConnectionHandler::beat(const asio::error_code& error)
     if (error && error != asio::error::operation_aborted)
     {
         // something weird did happen
-        log::error("heartbeat timer failed: {}", error.message());
+        log::error("[{}] heartbeat timer failed: {}", name_, error.message());
         if (this->connection_)
         {
             connection_->fail(error.message().c_str());
@@ -454,15 +466,21 @@ void BaseConnectionHandler::beat(const asio::error_code& error)
         return;
     }
 
-    log::trace("Sending heartbeat to server");
+    log::trace("[{}] Sending heartbeat to server", name_);
     assert(this->connection_);
-    connection_->heartbeat();
+    if (!connection_->heartbeat())
+    {
+        log::error("[{}] Failed to send heartbeat. Retry", name_);
+
+        this->heartbeat_timer_.expires_after(std::chrono::seconds(1));
+        this->heartbeat_timer_.async_wait([this](const auto& error) { this->beat(error); });
+    }
 
     // We don't need to setup the timer again, this will be done by the flush() handler triggerd by
     // the heartbeat() call itself
 }
 
-std::unique_ptr<AMQP::Channel> BaseConnectionHandler::make_channel()
+std::unique_ptr<AMQP::Channel> AsioConnectionHandler::make_channel()
 {
     assert(this->connection_);
     return std::make_unique<AMQP::Channel>(connection_.get());
