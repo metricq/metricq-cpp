@@ -29,9 +29,14 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
+#include <metricq/chrono.hpp>
 #include <metricq/connection.hpp>
 
 #include <amqpcpp.h>
+
+#include <memory>
+#include <optional>
+#include <string>
 
 namespace metricq
 {
@@ -52,6 +57,8 @@ protected:
     void close() override;
 
 private:
+    void open_data_connection();
+
     std::optional<AMQP::Address> data_server_address_;
     std::unique_ptr<AsioConnectionHandler> data_connection_;
 
