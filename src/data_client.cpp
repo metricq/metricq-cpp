@@ -28,26 +28,21 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <metricq/chrono.hpp>
 #include <metricq/data_client.hpp>
 
 #include "connection_handler.hpp"
 #include "log.hpp"
 #include "util.hpp"
 
+#include <functional>
+
+using namespace std::placeholders;
+
 namespace metricq
 {
 DataClient::DataClient(const std::string& token, bool add_uuid) : Connection(token, add_uuid)
 {
-    register_management_callback("discover", [starting_time = Clock::now()](const json&) -> json {
-        auto current_time = Clock::now();
-        auto uptime = (current_time - starting_time).count(); // current uptime in nanoseconds
-
-        return { { "alive", true },
-                 { "currentTime", Clock::format_iso(current_time) },
-                 { "startingTime", Clock::format_iso(starting_time) },
-                 { "uptime", uptime } };
-    });
+    register_rpc_callback("discover", std::bind(&DataClient::handle_discover_rpc, this, _1));
 }
 
 DataClient::~DataClient() = default;
@@ -71,6 +66,11 @@ void DataClient::data_config(const metricq::json& config)
 
     data_server_address_ = new_data_server_address;
 
+    open_data_connection();
+}
+
+void DataClient::open_data_connection()
+{
     log::debug("opening data connection to {}", *data_server_address_);
     if (data_server_address_->secure())
     {
@@ -111,4 +111,5 @@ void DataClient::close()
 void DataClient::on_data_channel_ready()
 {
 }
+
 } // namespace metricq
