@@ -186,7 +186,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 {
     const std::string content_str(incoming_message.body(),
                                   static_cast<size_t>(incoming_message.bodySize()));
-    log::debug("management rpc response received: {}", content_str);
+    log::debug("Management message received: {}", content_str);
 
     auto content = json::parse(content_str);
 
@@ -198,7 +198,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
         // Incoming message is a RPC-response, call the response handler
         if (content.count("error"))
         {
-            log::error("management rpc failed: {}. stopping", content["error"].get<std::string>());
+            log::error("rpc failed: {}. stopping", content["error"].get<std::string>());
             acknowledge.invoke();
             rpc_response_callbacks_.clear();
             stop();
@@ -230,7 +230,9 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
             throw RPCError();
         }
 
-        // we must search again because the handler might have invalidated the iterator
+        // we must search again because the handler might have invalidated the iterator by starting
+        // another RPC using the rpc() method. That would insert a new entry into the
+        // rpc_response_callbacks_ map and, thus, potentially invalidating the iterator.
         it = rpc_response_callbacks_.find(incoming_message.correlationID());
         if (it == rpc_response_callbacks_.end())
         {
