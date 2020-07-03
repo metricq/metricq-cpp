@@ -31,6 +31,7 @@
 #include <metricq/connection.hpp>
 #include <metricq/exception.hpp>
 #include <metricq/json.hpp>
+#include <metricq/version.hpp>
 
 #include "connection_handler.hpp"
 #include "log.hpp"
@@ -339,7 +340,8 @@ json Connection::handle_discover_rpc(const json&)
     return { { "alive", true },
              { "currentTime", Clock::format_iso(current_time) },
              { "startingTime", Clock::format_iso(starting_time_) },
-             { "uptime", uptime } };
+             { "uptime", uptime },
+             { "metricqVersion", metricq::version() } };
 }
 
 } // namespace metricq

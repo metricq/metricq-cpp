@@ -9,6 +9,7 @@ include(cmake/GitSubmoduleUpdate.cmake)
 git_submodule_update()
 
 find_package(Protobuf 3.0 REQUIRED)
+find_package(Git)
 
 set(metricq_VERSION 1.0)
 
@@ -39,6 +40,21 @@ add_custom_target(metricq-protobuf-move-headers ALL
         ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/history.pb.h
         ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/datachunk.pb.h
 )
+
+# generate version string used in lo2s
+if(Git_FOUND)
+    _is_git(${CMAKE_SOURCE_DIR} IN_GIT)
+endif()
+if(IN_GIT)
+    execute_process(COMMAND ${GIT_EXECUTABLE} describe --always --tags --dirty
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE METRICQ_VERSION_STRING
+    )
+    string(STRIP ${METRICQ_VERSION_STRING} METRICQ_VERSION_STRING)
+else()
+    set(METRICQ_VERSION_STRING ${metricq_VERSION})
+endif()
+configure_file(include/metricq/version.hpp.in include/metricq/version.hpp @ONLY)
 
 add_library(metricq-protobuf ${PROTO_SRC})
 add_dependencies(metricq-protobuf metricq-protobuf-move-headers)
