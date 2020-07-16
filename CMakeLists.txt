@@ -41,18 +41,59 @@ add_custom_target(metricq-protobuf-move-headers ALL
         ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/datachunk.pb.h
 )
 
-# generate version string used in lo2s
+# Generate a metricq version string ($METRICQ_VERSION_STRING).
+#
+# If the *current* CMake source directory is cointained in a .git repository
+# (e.g. when metricq is built in a submodule directory), we try generate a
+# version string from git history.  If not, we'll simply use $metricq_VERSION
+# as defined above.
+#
+# The general format of this is either (in a non-git directory, e.g. a release
+# tarball):
+#
+#   v$MAJOR.$MINOR[.$PATCH]
+#
+# or (when building in a git directory or git submodule)
+#
+#   r$REV_COUNT.g$HEAD_REV
+#
+# where $REV_COUNT is the number of revisions since the root commit
+# (git rev-list --count HEAD), and $HEAD_REV is the (abbreviated) commit hash
+# of latest commit.  Any competent™ version comparison tool should be able to
+# deduce that "r42.g1234abc < v1.0".
+#
+# TODO: if ever we `git tag` a version 1.0, version strings of in-git builds
+# should be formatted as
+#
+#   v$MAJOR.$MINOR[.$PATCH].r$REV_SINCE_LAST_VER.g$HEAD_REV[-dirty]
+#
+# similar to what `git describe --long --tags --dirty` outputs.
+#
+# NOTE: we use ${CMAKE_CURRENT_SOURCE_DIR} here instead of ${CMAKE_SOURCE_DIR}
+# since metricq is often built in a submodule.  The latter path points to the
+# parent git directory, and we'd end up with the parent project's version in
+# ${METRICQ_VERSION_STRING} if we used it.
 if(Git_FOUND)
-    _is_git(${CMAKE_SOURCE_DIR} IN_GIT)
+    _is_git(${CMAKE_CURRENT_SOURCE_DIR} IN_GIT)
 endif()
 if(IN_GIT)
-    execute_process(COMMAND ${GIT_EXECUTABLE} describe --always --tags --dirty
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE METRICQ_VERSION_STRING
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE REV_COUNT
     )
-    string(STRIP ${METRICQ_VERSION_STRING} METRICQ_VERSION_STRING)
+    string(STRIP ${REV_COUNT} REV_COUNT)
+
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short=7 HEAD
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE HEAD_REV
+    )
+    string(STRIP ${HEAD_REV} HEAD_REV)
+
+    set(METRICQ_VERSION_STRING "r${REV_COUNT}.g${HEAD_REV}")
 else()
-    set(METRICQ_VERSION_STRING ${metricq_VERSION})
+    set(METRICQ_VERSION_STRING "v${metricq_VERSION}")
 endif()
 configure_file(include/metricq/version.hpp.in include/metricq/version.hpp @ONLY)
 
