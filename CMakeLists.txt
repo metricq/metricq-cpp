@@ -41,11 +41,11 @@ add_custom_target(metricq-protobuf-move-headers ALL
 
 # generate version string used in lo2s
 if(Git_FOUND)
-    _is_git(${CMAKE_SOURCE_DIR} IN_GIT)
+    _is_git(${CMAKE_CURRENT_SOURCE_DIR} IN_GIT)
 endif()
 if(IN_GIT)
     execute_process(COMMAND ${GIT_EXECUTABLE} describe --always --tags --dirty
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         OUTPUT_VARIABLE METRICQ_VERSION_STRING
     )
     string(STRIP ${METRICQ_VERSION_STRING} METRICQ_VERSION_STRING)
