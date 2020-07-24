@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.13)
 
-project(metricq)
+project(metricq VERSION 1.0.0)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH}")
 
@@ -10,8 +10,6 @@ git_submodule_update()
 
 find_package(Protobuf 3.0 REQUIRED)
 find_package(Git)
-
-set(metricq_VERSION 1.0)
 
 if(NOT METRICQ_POSITION_INDEPENDENT_CODE)
     set(METRICQ_POSITION_INDEPENDENT_CODE OFF)
