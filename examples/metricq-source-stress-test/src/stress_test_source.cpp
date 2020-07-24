@@ -72,7 +72,7 @@ void StressTestSource::on_source_config(const metricq::json& config)
 {
     Log::debug() << "StressTestSource::on_source_config() called";
 
-    metric_ = config.at("metric");
+    metric_ = config.at("metric").get<std::string>();
 
     (*this)[metric_];
 }

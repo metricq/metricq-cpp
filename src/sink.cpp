@@ -73,7 +73,7 @@ void Sink::sink_config(const json& config)
     if (data_queue_.empty())
     {
         // Set data queue name from configuration.
-        data_queue_ = config.at("dataQueue");
+        data_queue_ = config.at("dataQueue").get<std::string>();
     }
     else
     {

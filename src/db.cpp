@@ -87,9 +87,9 @@ void Db::on_register_response(const json& response)
 
     sink_config(response);
 
-    history_queue_ = response["historyQueue"];
+    history_queue_ = response["historyQueue"].get<std::string>();
 
-    auto subscribe_metrics = on_db_config(response["config"]);
+    auto subscribe_metrics = on_db_config(response["config"].get<std::string>());
     db_subscribe(subscribe_metrics);
 
     setup_history_queue([this](const std::string& name, int message_count, int consumer_count) {

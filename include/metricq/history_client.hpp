@@ -30,7 +30,7 @@
 #pragma once
 
 #include <metricq/chrono.hpp>
-#include <metricq/data_client.hpp>
+#include <metricq/connection.hpp>
 #include <metricq/history.pb.h>
 #include <metricq/json_fwd.hpp>
 
