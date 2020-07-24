@@ -67,7 +67,8 @@ private:
     void on_history_response(const AMQP::Message&);
 
 protected:
-    void setup_history_queue(const AMQP::QueueCallback& callback);
+    void setup_history_queue();
+    void setup_history_consumer(const std::string& name, int message_count, int consumer_count);
     void config(const json& config);
     void on_connected() override;
 

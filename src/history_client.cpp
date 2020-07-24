@@ -49,10 +49,33 @@ HistoryClient::HistoryClient(const std::string& token, bool add_uuid) : Connecti
 
 HistoryClient::~HistoryClient() = default;
 
-void HistoryClient::setup_history_queue(const AMQP::QueueCallback& callback)
+void HistoryClient::setup_history_queue()
 {
     assert(history_channel_);
-    history_channel_->declareQueue(history_queue_, AMQP::passive).onSuccess(callback);
+    history_channel_->declareQueue(history_queue_, AMQP::passive)
+        .onSuccess([this](const auto& name, auto messages, auto consumers) {
+            this->setup_history_consumer(name, messages, consumers);
+        });
+}
+
+void HistoryClient::setup_history_consumer(const std::string& name, int message_count,
+                                           int consumer_count)
+{
+    log::notice("setting up history queue, messages {}, consumers {}", message_count,
+                consumer_count);
+
+    auto message_cb = [this](const AMQP::Message& message, uint64_t deliveryTag, bool redelivered) {
+        (void)redelivered;
+
+        on_history_response(message);
+        history_channel_->ack(deliveryTag);
+    };
+
+    history_channel_->consume(name)
+        .onReceived(message_cb)
+        .onSuccess(debug_success_cb("history queue consume success"))
+        .onError(debug_error_cb("history queue consume error"))
+        .onFinalize([]() { log::info("history queue consume finalize"); });
 }
 
 std::string HistoryClient::history_request(const std::string& id, TimePoint begin, TimePoint end,
@@ -97,35 +120,19 @@ void HistoryClient::config(const metricq::json& config)
 {
     history_config(config);
 
-    if (!history_exchange_.empty() && config["historyExchange"] != history_exchange_)
+    if (!history_exchange_.empty() &&
+        config["historyExchange"].get<std::string>() != history_exchange_)
     {
         log::fatal("changing historyExchange on the fly is not currently supported");
         std::abort();
     }
 
-    history_exchange_ = config["historyExchange"];
-    history_queue_ = config["historyQueue"];
+    history_exchange_ = config["historyExchange"].get<std::string>();
+    history_queue_ = config["historyQueue"].get<std::string>();
 
     on_history_config(config["config"]);
 
-    setup_history_queue([this](const std::string& name, int message_count, int consumer_count) {
-        log::notice("setting up history queue, messages {}, consumers {}", message_count,
-                    consumer_count);
-
-        auto message_cb = [this](const AMQP::Message& message, uint64_t deliveryTag,
-                                 bool redelivered) {
-            (void)redelivered;
-
-            on_history_response(message);
-            history_channel_->ack(deliveryTag);
-        };
-
-        history_channel_->consume(name)
-            .onReceived(message_cb)
-            .onSuccess(debug_success_cb("history queue consume success"))
-            .onError(debug_error_cb("history queue consume error"))
-            .onFinalize([]() { log::info("history queue consume finalize"); });
-    });
+    setup_history_queue();
 
     on_history_ready();
 }

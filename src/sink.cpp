@@ -106,43 +106,48 @@ void Sink::sink_config(const json& config)
         }
     }
 
-    setup_data_queue([this](const std::string& name, int message_count, int consumer_count) {
-        log::notice("setting up data queue, messages {}, consumers {}", message_count,
-                    consumer_count);
-        // we do not tolerate other consumers
-        if (consumer_count != 0)
-        {
-            log::fatal("unexpected consumer count {} - are we not alone in the queue?",
-                       consumer_count);
-        }
-
-        auto message_cb = [this](const AMQP::Message& message, uint64_t delivery_tag,
-                                 bool redelivered) { on_data(message, delivery_tag, redelivered); };
-
-        data_channel_->consume(name)
-            .onReceived(message_cb)
-            .onSuccess(debug_success_cb("sink data queue consume success"))
-            .onError(debug_error_cb("sink data queue consume error"))
-            .onFinalize([]() { log::info("sink data queue consume finalize"); });
-    });
+    setup_data_queue();
 }
 
-void Sink::setup_data_queue(const AMQP::QueueCallback& callback)
+void Sink::setup_data_queue()
 {
     // Ensure that we are not flooded by requests and forget to send out heartbeat
     // TODO configurable!
     data_channel_->setQos(400);
     assert(!data_queue_.empty());
-    data_channel_->declareQueue(data_queue_, AMQP::passive).onSuccess(callback);
+
+    data_channel_->declareQueue(data_queue_, AMQP::passive)
+        .onSuccess(std::bind(&Sink::setup_data_consumer, this, std::placeholders::_1,
+                             std::placeholders::_2, std::placeholders::_3));
+}
+
+void Sink::setup_data_consumer(const std::string& name, int message_count, int consumer_count)
+{
+    log::notice("setting up data queue, messages {}, consumers {}", message_count, consumer_count);
+
+    // we do not tolerate other consumers
+    if (consumer_count != 0)
+    {
+        log::fatal("unexpected consumer count {} - are we not alone in the queue?", consumer_count);
+    }
+
+    auto message_cb = [this](const AMQP::Message& message, uint64_t delivery_tag,
+                             bool redelivered) { on_data(message, delivery_tag, redelivered); };
+
+    data_channel_->consume(name)
+        .onReceived(message_cb)
+        .onSuccess(debug_success_cb("sink data queue consume success"))
+        .onError(debug_error_cb("sink data queue consume error"))
+        .onFinalize([]() { log::info("sink data queue consume finalize"); });
 }
 
 void Sink::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
 {
     (void)redelivered;
     const auto& metric_name = message.routingkey();
-    auto message_string = std::string(message.body(), message.bodySize());
+    auto message_body = std::string(message.body(), message.bodySize());
     data_chunk_.Clear();
-    data_chunk_.ParseFromString(message_string);
+    data_chunk_.ParseFromString(message_body);
     try
     {
         on_data(metric_name, data_chunk_);
