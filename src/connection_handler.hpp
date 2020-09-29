@@ -72,22 +72,22 @@ private:
     std::size_t offset_ = 0;
 };
 
-class BaseConnectionHandler : public AMQP::ConnectionHandler
+class AsioConnectionHandler : public AMQP::ConnectionHandler
 {
 public:
-    BaseConnectionHandler(asio::io_service& io_service);
+    AsioConnectionHandler(asio::io_service& io_service, const std::string& name);
 
     /**
      *  Beware: when deriving from this class, it might be necessary to
      *  explicitly destroy the #connection_ object before letting
-     *  BaseConnectionHandler's destructor run.  Otherwise, the onClose()
+     *  AsioConnectionHandler's destructor run.  Otherwise, the onClose()
      *  callback calls flush(), which in turn tries to use virtual functions of
      *  the derived object -- which has already been destroyed at this point.
      *
      *  @phijor: This is all kinds of tangled up, I know.  Propositions of more
      *  elegant solutions highly welcome.
      */
-    virtual ~BaseConnectionHandler()
+    virtual ~AsioConnectionHandler()
     {
         assert(!connection_); // Must be reset by instantiating class!
     }
@@ -206,24 +206,24 @@ protected:
     std::function<void()> close_callback_;
     std::unique_ptr<AMQP::Connection> connection_;
     std::optional<AMQP::Address> address_;
-    asio::system_timer reconnect_timer_;
     asio::system_timer heartbeat_timer_;
     std::chrono::milliseconds heartbeat_interval_;
     asio::ip::tcp::resolver resolver_;
     asio::streambuf recv_buffer_;
     QueuedBuffer send_buffers_;
     bool flush_in_progress_ = false;
+    std::string name_;
 };
 
-class ConnectionHandler : public BaseConnectionHandler
+class PlainConnectionHandler : public AsioConnectionHandler
 {
 public:
-    ConnectionHandler(asio::io_service& io_service);
+    PlainConnectionHandler(asio::io_service& io_service, const std::string& name);
 
     /**
-     *  @see ~BaseConnectionHandler() why this is necessary.
+     *  @see ~AsioConnectionHandler() why this is necessary.
      */
-    ~ConnectionHandler()
+    ~PlainConnectionHandler()
     {
         connection_.reset();
     }
@@ -243,13 +243,13 @@ protected:
     asio::ip::tcp::socket socket_;
 };
 
-class SSLConnectionHandler : public BaseConnectionHandler
+class SSLConnectionHandler : public AsioConnectionHandler
 {
 public:
-    SSLConnectionHandler(asio::io_service& io_service);
+    SSLConnectionHandler(asio::io_service& io_service, const std::string& name);
 
     /**
-     *  @see ~BaseConnectionHandler() why this is necessary.
+     *  @see ~AsioConnectionHandler() why this is necessary.
      */
     ~SSLConnectionHandler()
     {

@@ -44,8 +44,7 @@ int main(int argc, char* argv[])
     parser.option("server", "The MetricQ server to connect to.")
         .default_value("amqp://localhost")
         .short_name("s");
-    parser.option("token", "The token used for source authentication.")
-        .default_value("dummySource");
+    parser.option("token", "The token used for source authentication.").default_value("dummySink");
     parser.multi_option("metrics", "metrics to read").short_name("m");
     parser.toggle("verbose").short_name("v");
     parser.toggle("trace").short_name("t");

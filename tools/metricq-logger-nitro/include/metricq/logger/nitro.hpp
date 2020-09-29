@@ -34,7 +34,9 @@
 #include <nitro/log/log.hpp>
 #include <nitro/log/sink/stderr.hpp>
 #include <nitro/log/sink/stdout.hpp>
+#ifdef LOGGER_NITRO_SINK_SYSLOG
 #include <nitro/log/sink/syslog.hpp>
+#endif
 
 // Remove this once this is fixed in date: https://github.com/HowardHinnant/date/issues/338
 #define HAS_UNCAUGHT_EXCEPTIONS 1

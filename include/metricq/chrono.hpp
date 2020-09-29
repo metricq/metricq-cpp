@@ -33,6 +33,7 @@
 #include <string>
 
 #include <cinttypes>
+#include <ctime>
 
 namespace metricq
 {

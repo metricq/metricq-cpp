@@ -96,13 +96,13 @@ void DummyHistory::on_closed()
 }
 
 void DummyHistory::on_history_response(const std::string& id,
-                                       const metricq::HistoryResponseValueView& response)
+                                       const metricq::HistoryResponseValueView& view)
 {
     Log::debug() << "DummyHistory::on_history_response() called";
 
-    Log::info() << "Got HistoryResponseValue for metric: " << response.metric() << "(" << id << ")";
+    Log::info() << "Got HistoryResponseValue for metric: " << view.metric() << "(" << id << ")";
 
-    for (auto tv : response)
+    for (auto tv : view)
     {
         Log::info() << tv.time << ": " << tv.value;
     }
@@ -111,14 +111,13 @@ void DummyHistory::on_history_response(const std::string& id,
 }
 
 void DummyHistory::on_history_response(const std::string& id,
-                                       const metricq::HistoryResponseAggregateView& response)
+                                       const metricq::HistoryResponseAggregateView& view)
 {
     Log::debug() << "DummyHistory::on_history_response() called";
 
-    Log::info() << "Got HistoryResponseAggregate for metric: " << response.metric() << "(" << id
-                << ")";
+    Log::info() << "Got HistoryResponseAggregate for metric: " << view.metric() << "(" << id << ")";
 
-    for (auto tva : response)
+    for (auto tva : view)
     {
         Log::info() << tva.time << ": " << tva.mean() << " (" << tva.min << " - " << tva.max
                     << ") @ " << tva.count;

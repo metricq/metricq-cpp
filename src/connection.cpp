@@ -31,6 +31,7 @@
 #include <metricq/connection.hpp>
 #include <metricq/exception.hpp>
 #include <metricq/json.hpp>
+#include <metricq/version.hpp>
 
 #include "connection_handler.hpp"
 #include "log.hpp"
@@ -79,11 +80,13 @@ void Connection::connect(const std::string& server_address)
 
     if (server_address.substr(0, 5) == "amqps")
     {
-        management_connection_ = std::make_unique<SSLConnectionHandler>(io_service);
+        management_connection_ =
+            std::make_unique<SSLConnectionHandler>(io_service, "Mgmt connection");
     }
     else
     {
-        management_connection_ = std::make_unique<ConnectionHandler>(io_service);
+        management_connection_ =
+            std::make_unique<PlainConnectionHandler>(io_service, "Mgmt connection");
     }
     management_connection_->set_error_callback(
         [this](const auto& message) { this->on_error(message); });
@@ -114,45 +117,69 @@ void Connection::connect(const std::string& server_address)
         });
 }
 
-void Connection::register_management_callback(const std::string& function, ManagementCallback cb)
+void Connection::register_rpc_callback(const std::string& function, RPCCallback cb)
 {
-    auto ret = management_callbacks_.emplace(function, std::move(cb));
+    auto ret = rpc_callbacks_.emplace(function, std::move(cb));
     if (!ret.second)
     {
-        log::error("trying to register management callback that is already registered: {}",
-                   function);
-        throw std::invalid_argument(
-            "trying to register management callback that is already registered");
+        log::error("trying to register RPC callback that is already registered: {}", function);
+        throw std::invalid_argument("trying to register RPC callback that is already registered");
     }
 }
 
-void Connection::rpc(const std::string& function, ManagementResponseCallback response_callback,
-                     json payload)
+void Connection::register_rpc_response_callback(const std::string& correlation_id,
+                                                RPCResponseCallback callback, Duration timeout)
 {
-    log::debug("management rpc sending {}", function);
-    payload["function"] = function;
-    std::string message = payload.dump();
-    AMQP::Envelope envelope(message.data(), message.size());
-
-    auto correlation_id = std::string("metricq-rpc-") + connection_token_ + "-" + uuid();
-    envelope.setCorrelationID(correlation_id);
-    envelope.setAppID(connection_token_);
-    assert(!management_client_queue_.empty());
-    envelope.setReplyTo(management_client_queue_);
-    envelope.setContentType("application/json");
-
-    auto ret =
-        management_rpc_response_callbacks_.emplace(correlation_id, std::move(response_callback));
+    auto ret = rpc_response_callbacks_.emplace(
+        std::piecewise_construct, std::make_tuple(correlation_id),
+        std::make_tuple(std::ref(io_service), std::move(callback), timeout));
     if (!ret.second)
     {
-        log::error(
-            "trying to register management RPC response callback that is already registered: {}",
-            correlation_id);
+        log::error("trying to register RPC response callback that is already registered: {}",
+                   correlation_id);
         throw std::invalid_argument(
-            "trying to register management RPC response callback that is already registered");
+            "trying to register RPC response callback that is already registered");
+    }
+}
+
+std::string Connection::prepare_message(const std::string& function, json payload)
+{
+    if (payload.count("function"))
+    {
+        throw std::invalid_argument("Function was already set in payload.");
     }
 
-    management_channel_->publish(management_exchange_, function, envelope);
+    payload["function"] = function;
+    return payload.dump();
+}
+
+std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelope(const std::string& message)
+{
+    auto envelope = std::make_unique<AMQP::Envelope>(message.data(), message.size());
+
+    auto correlation_id = std::string("metricq-rpc-") + connection_token_ + "-" + uuid();
+
+    envelope->setCorrelationID(std::move(correlation_id));
+    envelope->setAppID(connection_token_);
+    envelope->setContentType("application/json");
+
+    assert(!management_client_queue_.empty());
+    envelope->setReplyTo(management_client_queue_);
+
+    return envelope;
+}
+
+void Connection::rpc(const std::string& function, RPCResponseCallback callback, json payload,
+                     Duration timeout)
+{
+    log::debug("sending rpc: {}", function);
+
+    auto message = prepare_message(function, std::move(payload));
+    auto envelope = prepare_rpc_envelope(message);
+
+    register_rpc_response_callback(envelope->correlationID(), std::move(callback), timeout);
+
+    management_channel_->publish(management_exchange_, function, *envelope);
 }
 
 void Connection::handle_management_message(const AMQP::Message& incoming_message,
@@ -160,20 +187,21 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 {
     const std::string content_str(incoming_message.body(),
                                   static_cast<size_t>(incoming_message.bodySize()));
-    log::debug("management rpc response received: {}", content_str);
+    log::debug("Management message received: {}", content_str);
 
     auto content = json::parse(content_str);
 
     auto acknowledge = finally([this, deliveryTag]() { management_channel_->ack(deliveryTag); });
 
-    if (auto it = management_rpc_response_callbacks_.find(incoming_message.correlationID());
-        it != management_rpc_response_callbacks_.end())
+    if (auto it = rpc_response_callbacks_.find(incoming_message.correlationID());
+        it != rpc_response_callbacks_.end())
     {
         // Incoming message is a RPC-response, call the response handler
         if (content.count("error"))
         {
-            log::error("management rpc failed: {}. stopping", content["error"].get<std::string>());
+            log::error("rpc failed: {}. stopping", content["error"].get<std::string>());
             acknowledge.invoke();
+            rpc_response_callbacks_.clear();
             stop();
             return;
         }
@@ -203,15 +231,17 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
             throw RPCError();
         }
 
-        // we must search again because the handler might have invalidated the iterator
-        it = management_rpc_response_callbacks_.find(incoming_message.correlationID());
-        if (it == management_rpc_response_callbacks_.end())
+        // we must search again because the handler might have invalidated the iterator by starting
+        // another RPC using the rpc() method. That would insert a new entry into the
+        // rpc_response_callbacks_ map and, thus, potentially invalidating the iterator.
+        it = rpc_response_callbacks_.find(incoming_message.correlationID());
+        if (it == rpc_response_callbacks_.end())
         {
             log::error("error in rpc response handling {}: response callback vanished",
                        incoming_message.correlationID());
             throw RPCError();
         }
-        management_rpc_response_callbacks_.erase(it);
+        rpc_response_callbacks_.erase(it);
         return;
     }
 
@@ -224,7 +254,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 
     auto function = content.at("function").get<std::string>();
 
-    if (auto it = management_callbacks_.find(function); it != management_callbacks_.end())
+    if (auto it = rpc_callbacks_.find(function); it != rpc_callbacks_.end())
     {
         log::debug("management rpc call received: {}", content_str);
         // incoming message is a RPC-call
@@ -299,4 +329,19 @@ void Connection::stop()
     close();
     // the io_service will stop itself once all connections are closed
 }
+
+json Connection::handle_discover_rpc(const json&)
+{
+    auto current_time = Clock::now();
+    auto uptime =
+        std::chrono::duration_cast<std::chrono::duration<double>>(current_time - starting_time_)
+            .count();
+
+    return { { "alive", true },
+             { "currentTime", Clock::format_iso(current_time) },
+             { "startingTime", Clock::format_iso(starting_time_) },
+             { "uptime", uptime },
+             { "metricqVersion", metricq::version() } };
+}
+
 } // namespace metricq

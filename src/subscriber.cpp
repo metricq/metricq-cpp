@@ -49,7 +49,7 @@ void Subscriber::on_connected()
 {
     rpc("sink.subscribe",
         [this](const json& response) {
-            queue_ = response["dataQueue"];
+            queue_ = response["dataQueue"].get<std::string>();
             stop();
         },
         { { "metrics", metrics_ },

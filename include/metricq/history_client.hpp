@@ -30,7 +30,7 @@
 #pragma once
 
 #include <metricq/chrono.hpp>
-#include <metricq/data_client.hpp>
+#include <metricq/connection.hpp>
 #include <metricq/history.pb.h>
 #include <metricq/json_fwd.hpp>
 
@@ -38,7 +38,7 @@
 
 namespace metricq
 {
-class BaseConnectionHandler;
+class AsioConnectionHandler;
 class HistoryResponseValueView;
 class HistoryResponseAggregateView;
 
@@ -67,7 +67,8 @@ private:
     void on_history_response(const AMQP::Message&);
 
 protected:
-    void setup_history_queue(const AMQP::QueueCallback& callback);
+    void setup_history_queue();
+    void setup_history_consumer(const std::string& name, int message_count, int consumer_count);
     void config(const json& config);
     void on_connected() override;
 
@@ -85,7 +86,7 @@ protected:
 
 private:
     std::optional<AMQP::Address> data_server_address_;
-    std::unique_ptr<BaseConnectionHandler> history_connection_;
+    std::unique_ptr<AsioConnectionHandler> history_connection_;
 
 protected:
     std::unique_ptr<AMQP::Channel> history_channel_;

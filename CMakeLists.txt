@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.13)
 
-project(metricq)
+project(metricq VERSION 1.0.0)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH}")
 
@@ -9,8 +9,7 @@ include(cmake/GitSubmoduleUpdate.cmake)
 git_submodule_update()
 
 find_package(Protobuf 3.0 REQUIRED)
-
-set(metricq_VERSION 1.0)
+find_package(Git)
 
 if(NOT METRICQ_POSITION_INDEPENDENT_CODE)
     set(METRICQ_POSITION_INDEPENDENT_CODE OFF)
@@ -20,14 +19,43 @@ independent code" ${METRICQ_POSITION_INDEPENDENT_CODE})
 
 add_subdirectory(lib)
 
-protobuf_generate_cpp(PROTO_SRC PROTO_HEADER lib/metricq-protobuf/datachunk.proto lib/metricq-protobuf/history.proto)
-add_library(metricq-protobuf ${PROTO_SRC})
+set(PROTO_FILES lib/metricq-protobuf/datachunk.proto lib/metricq-protobuf/history.proto)
+protobuf_generate_cpp(PROTO_SRC PROTO_HEADER ${PROTO_FILES})
 #this is needed to get the generated protobuf files in a sane location : (
-add_custom_command(TARGET metricq-protobuf PRE_BUILD
+add_custom_command(
+    OUTPUT
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/history.pb.h
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/datachunk.pb.h
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    DEPENDS ${PROTO_FILES} ${PROTO_HEADER}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
     COMMAND ${CMAKE_COMMAND} -E copy ${PROTO_HEADER} ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
     COMMENT "Copy generated protobuf headers..."
 )
+add_custom_target(metricq-protobuf-move-headers ALL
+    DEPENDS
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/history.pb.h
+        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/datachunk.pb.h
+)
+
+# generate version string used in lo2s
+if(Git_FOUND)
+    _is_git(${CMAKE_CURRENT_SOURCE_DIR} IN_GIT)
+endif()
+if(IN_GIT)
+    execute_process(COMMAND ${GIT_EXECUTABLE} describe --always --tags --dirty
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE METRICQ_VERSION_STRING
+    )
+    string(STRIP ${METRICQ_VERSION_STRING} METRICQ_VERSION_STRING)
+else()
+    set(METRICQ_VERSION_STRING ${metricq_VERSION})
+endif()
+configure_file(include/metricq/version.hpp.in include/metricq/version.hpp @ONLY)
+
+add_library(metricq-protobuf ${PROTO_SRC})
+add_dependencies(metricq-protobuf metricq-protobuf-move-headers)
 target_include_directories(metricq-protobuf
     INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>

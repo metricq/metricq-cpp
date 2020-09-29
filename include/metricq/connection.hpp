@@ -30,6 +30,7 @@
 #pragma once
 
 #include <metricq/json.hpp>
+#include <metricq/timer.hpp>
 
 #include <asio/io_service.hpp>
 
@@ -44,7 +45,41 @@
 namespace metricq
 {
 
-class BaseConnectionHandler;
+class AsioConnectionHandler;
+
+class RPCResponseGuard
+{
+public:
+    using Callback = std::function<void(const json& response)>;
+
+    RPCResponseGuard(asio::io_service& io_service, Callback callback,
+                     Duration timeout = std::chrono::seconds(60))
+    : timer_(io_service, std::bind(&RPCResponseGuard::on_timeout, this, std::placeholders::_1)),
+      callback_(std::move(callback))
+    {
+        timer_.start(timeout);
+    }
+
+    ~RPCResponseGuard()
+    {
+        timer_.cancel();
+    }
+
+    Timer::TimerResult on_timeout(std::error_code)
+    {
+        throw std::runtime_error("Timeout during RPC");
+    }
+
+    void operator()(const json& response)
+    {
+        timer_.cancel();
+        callback_(response);
+    }
+
+private:
+    metricq::Timer timer_;
+    Callback callback_;
+};
 
 class Connection
 {
@@ -52,8 +87,8 @@ public:
     void main_loop();
 
 protected:
-    using ManagementCallback = std::function<json(const json& response)>;
-    using ManagementResponseCallback = std::function<void(const json& response)>;
+    using RPCCallback = std::function<json(const json& response)>;
+    using RPCResponseCallback = RPCResponseGuard::Callback;
 
     explicit Connection(const std::string& connection_token, bool add_uuid = false,
                         std::size_t concurrency_hint = 1);
@@ -79,19 +114,25 @@ protected:
 
     virtual void on_connected() = 0;
 
-    void rpc(const std::string& function, ManagementResponseCallback callback,
-             json payload = json({}));
-    void register_management_callback(const std::string& function, ManagementCallback callback);
+    void rpc(const std::string& function, RPCResponseCallback callback, json payload = json({}),
+             Duration timeout = std::chrono::seconds(60));
+    void register_rpc_callback(const std::string& function, RPCCallback callback);
+    void register_rpc_response_callback(const std::string& correlation_id,
+                                        RPCResponseCallback callback, Duration timeout);
+
+    std::string prepare_message(const std::string& function, json payload);
+    std::unique_ptr<AMQP::Envelope> prepare_rpc_envelope(const std::string& message);
 
     void stop();
     virtual void close();
 
     AMQP::Address derive_address(const std::string& address);
 
+    virtual json handle_discover_rpc(const json&);
+
 private:
     void handle_management_message(const AMQP::Message& incoming_message, uint64_t deliveryTag,
                                    bool redelivered);
-    void handle_broadcast_message(const AMQP::Message& message);
 
 protected:
     asio::io_service io_service;
@@ -101,13 +142,15 @@ private:
     std::string connection_token_;
 
     // TODO combine & abstract to extra class
-    std::unique_ptr<BaseConnectionHandler> management_connection_;
+    std::unique_ptr<AsioConnectionHandler> management_connection_;
     std::unique_ptr<AMQP::Channel> management_channel_;
-    std::unordered_map<std::string, ManagementCallback> management_callbacks_;
-    std::unordered_map<std::string, ManagementResponseCallback> management_rpc_response_callbacks_;
+    std::unordered_map<std::string, RPCCallback> rpc_callbacks_;
+    std::unordered_map<std::string, RPCResponseGuard> rpc_response_callbacks_;
     std::string management_client_queue_;
     std::string management_queue_ = "management";
     std::string management_exchange_ = "metricq.management";
     std::string management_broadcast_exchange_ = "metricq.broadcast";
+
+    metricq::TimePoint starting_time_ = Clock::now();
 };
 } // namespace metricq

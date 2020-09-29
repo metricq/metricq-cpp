@@ -36,27 +36,46 @@
 #include "log.hpp"
 #include "util.hpp"
 
+#include <functional>
+
+using namespace std::placeholders;
+
 namespace metricq
 {
 HistoryClient::HistoryClient(const std::string& token, bool add_uuid) : Connection(token, add_uuid)
 {
-    register_management_callback("discover", [starting_time = Clock::now()](const json&) -> json {
-        auto current_time = Clock::now();
-        auto uptime = (current_time - starting_time).count(); // current uptime in nanoseconds
-
-        return { { "alive", true },
-                 { "currentTime", Clock::format_iso(current_time) },
-                 { "startingTime", Clock::format_iso(starting_time) },
-                 { "uptime", uptime } };
-    });
+    register_rpc_callback("discover", std::bind(&HistoryClient::handle_discover_rpc, this, _1));
 }
 
 HistoryClient::~HistoryClient() = default;
 
-void HistoryClient::setup_history_queue(const AMQP::QueueCallback& callback)
+void HistoryClient::setup_history_queue()
 {
     assert(history_channel_);
-    history_channel_->declareQueue(history_queue_, AMQP::passive).onSuccess(callback);
+    history_channel_->declareQueue(history_queue_, AMQP::passive)
+        .onSuccess([this](const auto& name, auto messages, auto consumers) {
+            this->setup_history_consumer(name, messages, consumers);
+        });
+}
+
+void HistoryClient::setup_history_consumer(const std::string& name, int message_count,
+                                           int consumer_count)
+{
+    log::notice("setting up history queue, messages {}, consumers {}", message_count,
+                consumer_count);
+
+    auto message_cb = [this](const AMQP::Message& message, uint64_t deliveryTag, bool redelivered) {
+        (void)redelivered;
+
+        on_history_response(message);
+        history_channel_->ack(deliveryTag);
+    };
+
+    history_channel_->consume(name)
+        .onReceived(message_cb)
+        .onSuccess(debug_success_cb("history queue consume success"))
+        .onError(debug_error_cb("history queue consume error"))
+        .onFinalize([]() { log::info("history queue consume finalize"); });
 }
 
 std::string HistoryClient::history_request(const std::string& id, TimePoint begin, TimePoint end,
@@ -101,35 +120,19 @@ void HistoryClient::config(const metricq::json& config)
 {
     history_config(config);
 
-    if (!history_exchange_.empty() && config["historyExchange"] != history_exchange_)
+    if (!history_exchange_.empty() &&
+        config["historyExchange"].get<std::string>() != history_exchange_)
     {
         log::fatal("changing historyExchange on the fly is not currently supported");
         std::abort();
     }
 
-    history_exchange_ = config["historyExchange"];
-    history_queue_ = config["historyQueue"];
+    history_exchange_ = config["historyExchange"].get<std::string>();
+    history_queue_ = config["historyQueue"].get<std::string>();
 
     on_history_config(config["config"]);
 
-    setup_history_queue([this](const std::string& name, int message_count, int consumer_count) {
-        log::notice("setting up history queue, messages {}, consumers {}", message_count,
-                    consumer_count);
-
-        auto message_cb = [this](const AMQP::Message& message, uint64_t deliveryTag,
-                                 bool redelivered) {
-            (void)redelivered;
-
-            on_history_response(message);
-            history_channel_->ack(deliveryTag);
-        };
-
-        history_channel_->consume(name)
-            .onReceived(message_cb)
-            .onSuccess(debug_success_cb("history queue consume success"))
-            .onError(debug_error_cb("history queue consume error"))
-            .onFinalize([]() { log::info("history queue consume finalize"); });
-    });
+    setup_history_queue();
 
     on_history_ready();
 }
@@ -160,11 +163,12 @@ void HistoryClient::history_config(const json& config)
     log::debug("opening history connection to {}", *data_server_address_);
     if (data_server_address_->secure())
     {
-        history_connection_ = std::make_unique<SSLConnectionHandler>(io_service);
+        history_connection_ = std::make_unique<SSLConnectionHandler>(io_service, "Hist connection");
     }
     else
     {
-        history_connection_ = std::make_unique<ConnectionHandler>(io_service);
+        history_connection_ =
+            std::make_unique<PlainConnectionHandler>(io_service, "Hist connection");
     }
 
     history_connection_->connect(*data_server_address_);
@@ -198,11 +202,11 @@ void HistoryClient::on_history_response(const std::string& id, const HistoryResp
 {
     if (response.value_size() > 0)
     {
-        on_history_response(id, *static_cast<const HistoryResponseValueView*>(&response));
+        on_history_response(id, HistoryResponseValueView(response));
     }
     else
     {
-        on_history_response(id, *static_cast<const HistoryResponseAggregateView*>(&response));
+        on_history_response(id, HistoryResponseAggregateView(response));
     }
 }
 

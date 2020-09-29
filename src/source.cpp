@@ -46,7 +46,7 @@ namespace metricq
 
 Source::Source(const std::string& token) : DataClient(token)
 {
-    register_management_callback("config", [this](const json& config) -> json {
+    register_rpc_callback("config", [this](const json& config) -> json {
         on_source_config(config);
         declare_metrics();
         return json::object();

@@ -320,32 +320,66 @@ private:
     int64_t timestamp = 0;
 };
 
-class HistoryResponseValueView : public HistoryResponse
+class HistoryResponseValueView
 {
+public:
+    explicit HistoryResponseValueView(const HistoryResponse& hr) : hr_(hr)
+    {
+    }
+
+    const HistoryResponse& response() const
+    {
+        return hr_;
+    }
+
+    const std::string& metric() const
+    {
+        return hr_.metric();
+    }
+
+    inline HistoryResponseValueIterator begin() const
+    {
+        return { hr_.time_delta().begin(), hr_.value().begin() };
+    }
+
+    inline HistoryResponseValueIterator end() const
+    {
+        return { hr_.time_delta().end(), hr_.value().end() };
+    }
+
+private:
+    const HistoryResponse& hr_;
 };
 
-inline HistoryResponseValueIterator begin(const HistoryResponseValueView& hr)
+class HistoryResponseAggregateView
 {
-    return { hr.time_delta().begin(), hr.value().begin() };
-}
+public:
+    explicit HistoryResponseAggregateView(const HistoryResponse& hr) : hr_(hr)
+    {
+    }
 
-inline HistoryResponseValueIterator end(const HistoryResponseValueView& hr)
-{
-    return { hr.time_delta().end(), hr.value().end() };
-}
+    const HistoryResponse& response() const
+    {
+        return hr_;
+    }
 
-class HistoryResponseAggregateView : public HistoryResponse
-{
+    const std::string& metric() const
+    {
+        return hr_.metric();
+    }
+
+    inline HistoryResponseAggregateIterator begin() const
+    {
+        return { hr_.time_delta().begin(), hr_.aggregate().begin() };
+    }
+
+    inline HistoryResponseAggregateIterator end() const
+    {
+        return { hr_.time_delta().end(), hr_.aggregate().end() };
+    }
+
+private:
+    const HistoryResponse& hr_;
 };
-
-inline HistoryResponseAggregateIterator begin(const HistoryResponseAggregateView& hr)
-{
-    return { hr.time_delta().begin(), hr.aggregate().begin() };
-}
-
-inline HistoryResponseAggregateIterator end(const HistoryResponseAggregateView& hr)
-{
-    return { hr.time_delta().end(), hr.aggregate().end() };
-}
 
 } // namespace metricq

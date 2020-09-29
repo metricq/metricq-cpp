@@ -29,6 +29,8 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
+#include <metricq/chrono.hpp>
+
 #include <asio/basic_waitable_timer.hpp>
 #include <asio/io_service.hpp>
 

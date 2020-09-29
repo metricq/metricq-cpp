@@ -1,4 +1,4 @@
-// Copyright (c) 2018, ZIH,
+// Copyright (c) 2020, ZIH,
 // Technische Universitaet Dresden,
 // Federal Republic of Germany
 //
@@ -27,42 +27,17 @@
 // LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 #pragma once
 
-#include <metricq/chrono.hpp>
-#include <metricq/connection.hpp>
-
-#include <amqpcpp.h>
-
-#include <memory>
-#include <optional>
 #include <string>
 
 namespace metricq
 {
-
-class AsioConnectionHandler;
-
-class DataClient : public Connection
+static const std::string& version()
 {
-public:
-    DataClient(const std::string& token, bool add_uuid = false);
+    static std::string version_string = "metricq-cpp/@METRICQ_VERSION_STRING@";
 
-    // We have to do this because of the ConnectionHandler forward declaration
-    ~DataClient();
-
-protected:
-    virtual void on_data_channel_ready();
-    void data_config(const json& config);
-    void close() override;
-
-private:
-    void open_data_connection();
-
-    std::optional<AMQP::Address> data_server_address_;
-    std::unique_ptr<AsioConnectionHandler> data_connection_;
-
-protected:
-    std::unique_ptr<AMQP::Channel> data_channel_;
-};
+    return version_string;
+}
 } // namespace metricq

@@ -69,7 +69,7 @@ void Db::on_db_config(const metricq::json& config, metricq::Db::ConfigCompletion
 
 void Db::ConfigCompletion::operator()(json subscribe_metrics)
 {
-    auto run = [& self = this->self, initial = this->initial,
+    auto run = [&self = this->self, initial = this->initial,
                 subscribe_metrics = std::move(subscribe_metrics)]() {
         if (initial)
         {
@@ -143,7 +143,7 @@ void Db::on_register_response(const json& response)
 
     sink_config(response);
 
-    history_queue_ = response["historyQueue"];
+    history_queue_ = response["historyQueue"].get<std::string>();
 
     on_db_config(response["config"], ConfigCompletion(*this, true));
 }
