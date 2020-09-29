@@ -51,7 +51,7 @@ public:
     void on_data(const std::string& id, const metricq::DataChunk& chunk) override
     {
         auto& d = data_.at(id);
-        for (const auto& tv : chunk)
+        for (auto tv : chunk)
         {
             d.emplace_back(tv);
         }

@@ -89,7 +89,7 @@ install(DIRECTORY amqpcpp/include/
 # BEGIN asio
 
 add_library(asio INTERFACE)
-target_include_directories(asio
+target_include_directories(asio SYSTEM
     INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/asio/asio/include>
         $<INSTALL_INTERFACE:include>

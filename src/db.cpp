@@ -40,7 +40,7 @@ namespace metricq
 {
 Db::Db(const std::string& token) : Sink(token)
 {
-    register_management_callback("config", [this](const json& config) {
+    register_rpc_callback("config", [this](const json& config) {
         on_db_config(config, ConfigCompletion(*this, false));
         // Unfortunately we must send the response now because of how the management callback stuff
         // is working. Technically, a threaded DB could wait for the event of another thread here.

@@ -103,7 +103,6 @@ protected:
 private:
     // let's hope the child classes never need to deal with this and the generic callback is
     // sufficient
-    void setup_data_queue();
     void setup_data_consumer(const std::string& name, int message_count, int consumer_count);
 
 protected:
