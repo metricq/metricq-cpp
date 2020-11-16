@@ -37,8 +37,8 @@
 using Log = metricq::logger::nitro::Log;
 
 StressTestSource::StressTestSource(const std::string& manager_host, const std::string& token,
-                                   int interval_ms, size_t chunk_size)
-: metricq::Source(token), signals_(io_service, SIGINT, SIGTERM), interval_ms(interval_ms),
+                                   metricq::Duration interval, size_t chunk_size)
+: metricq::Source(token), signals_(io_service, SIGINT, SIGTERM), interval(interval),
   chunk_size_(chunk_size), t(0), timer_(io_service)
 {
     Log::debug() << "StressTestSource::StressTestSource() called";
@@ -86,8 +86,7 @@ void StressTestSource::on_source_ready()
 
     current_time_ = metricq::Clock::now();
 
-    timer_.start([this](auto err) { return this->timeout_cb(err); },
-                 std::chrono::milliseconds(interval_ms));
+    timer_.start([this](auto err) { return this->timeout_cb(err); }, interval);
 
     running_ = true;
 }
@@ -120,11 +119,12 @@ metricq::Timer::TimerResult StressTestSource::timeout_cb(std::error_code)
     metric.chunk_size(0);
     for (size_t i = 0; i < chunk_size_; i++)
     {
-        double value = 2 * M_PI * (t + (double)i / chunk_size_) / interval_ms;
+        // TODO: figure out, what `value` should be. It's a stress test source,
+        // so the exact value shouldn't matter, but 637d7e (for some reason)
+        // removed a `sin(...)` here
+        double value = 2 * M_PI * (t + (double)i / chunk_size_) / interval.count();
         metric.send({ current_time_, value });
-        current_time_ +=
-            std::chrono::duration_cast<metricq::Duration>(std::chrono::milliseconds(interval_ms)) /
-            (chunk_size_ + 1);
+        current_time_ += interval / (chunk_size_ + 1);
     }
     metric.flush();
     t++;

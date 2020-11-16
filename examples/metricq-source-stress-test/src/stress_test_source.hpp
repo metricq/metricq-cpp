@@ -27,6 +27,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
+#include <metricq/chrono.hpp>
 #include <metricq/source.hpp>
 #include <metricq/timer.hpp>
 
@@ -38,8 +39,8 @@
 class StressTestSource : public metricq::Source
 {
 public:
-    StressTestSource(const std::string& manager_host, const std::string& token, int interval_ms,
-                     size_t chunk_size);
+    StressTestSource(const std::string& manager_host, const std::string& token,
+                     metricq::Duration interval, size_t chunk_size);
     ~StressTestSource();
 
     void on_error(const std::string& message) override;
@@ -51,7 +52,7 @@ private:
 
     asio::signal_set signals_;
 
-    int interval_ms;
+    metricq::Duration interval;
     size_t chunk_size_;
     int t;
     metricq::Timer timer_;
