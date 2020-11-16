@@ -53,6 +53,9 @@ int main(int argc, char* argv[])
     parser.option("interval", "Interval to generate data in milliseconds.")
         .short_name("i")
         .default_value("100");
+    parser.option("chunk", "Number of values sent per chunk")
+        .short_name("c")
+        .default_value("100000");
 
     try
     {
@@ -80,7 +83,7 @@ int main(int argc, char* argv[])
         metricq::logger::nitro::initialize();
 
         StressTestSource source(options.get("server"), options.get("token"),
-                                options.as<int>("interval"));
+                                options.as<int>("interval"), options.as<size_t>("chunk"));
         Log::info() << "starting main loop.";
         source.main_loop();
         Log::info() << "exiting main loop.";

@@ -37,9 +37,9 @@
 using Log = metricq::logger::nitro::Log;
 
 StressTestSource::StressTestSource(const std::string& manager_host, const std::string& token,
-                                   int interval_ms)
-: metricq::Source(token), signals_(io_service, SIGINT, SIGTERM), interval_ms(interval_ms), t(0),
-  timer_(io_service)
+                                   int interval_ms, size_t chunk_size)
+: metricq::Source(token), signals_(io_service, SIGINT, SIGTERM), interval_ms(interval_ms),
+  chunk_size_(chunk_size), t(0), timer_(io_service)
 {
     Log::debug() << "StressTestSource::StressTestSource() called";
 
@@ -116,16 +116,15 @@ metricq::Timer::TimerResult StressTestSource::timeout_cb(std::error_code)
         return metricq::Timer::TimerResult::cancel;
     }
     Log::debug() << "sending metrics...";
-    const auto r = 100000;
     auto& metric = (*this)[metric_];
     metric.chunk_size(0);
-    for (int i = 0; i < r; i++)
+    for (size_t i = 0; i < chunk_size_; i++)
     {
-        double value = 2 * M_PI * (t + (double)i / r) / interval_ms;
+        double value = 2 * M_PI * (t + (double)i / chunk_size_) / interval_ms;
         metric.send({ current_time_, value });
         current_time_ +=
             std::chrono::duration_cast<metricq::Duration>(std::chrono::milliseconds(interval_ms)) /
-            (r + 1);
+            (chunk_size_ + 1);
     }
     metric.flush();
     t++;
