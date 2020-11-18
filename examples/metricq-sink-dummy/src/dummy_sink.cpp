@@ -39,8 +39,8 @@ using Log = metricq::logger::nitro::Log;
 
 DummySink::DummySink(const std::string& manager_host, const std::string& token,
                      const std::vector<std::string>& metrics, metricq::Duration timeout,
-                     std::size_t expected_chunk_count)
-: metricq::Sink(token, true), signals_(io_service, SIGINT, SIGTERM), metrics_(metrics),
+                     std::size_t expected_chunk_count, bool add_uuid)
+: metricq::Sink(token, add_uuid), signals_(io_service, SIGINT, SIGTERM), metrics_(metrics),
   timeout_(timeout), expected_chunk_count_(expected_chunk_count), timer_(io_service),
   timeout_timer_(io_service)
 {

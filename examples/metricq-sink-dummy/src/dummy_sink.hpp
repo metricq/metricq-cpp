@@ -40,7 +40,7 @@ class DummySink : public metricq::Sink
 public:
     DummySink(const std::string& manager_host, const std::string& token,
               const std::vector<std::string>& metrics, metricq::Duration timeout,
-              std::size_t expected_chunk_count);
+              std::size_t expected_chunk_count, bool add_uuid);
 
 protected:
     void on_error(const std::string& message) override;

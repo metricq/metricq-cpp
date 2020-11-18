@@ -50,6 +50,7 @@ int main(int argc, char* argv[])
     parser.toggle("trace").short_name("t");
     parser.toggle("quiet").short_name("q");
     parser.toggle("help").short_name("h");
+    parser.toggle("durable").short_name("d");
     parser
         .option("timeout",
                 "Timeout for receiving messages in seconds. Set to 0 to deactivate timeout.")
@@ -101,8 +102,10 @@ int main(int argc, char* argv[])
         {
             metrics.push_back(options.get("metrics", i));
         }
+
+        bool add_uuid = !options.given("durable");
         DummySink sink(options.get("server"), options.get("token"), metrics, timeout,
-                       options.as<std::size_t>("count"));
+                       options.as<std::size_t>("count"), add_uuid);
         Log::info() << "starting main loop.";
         sink.main_loop();
         Log::info() << "exiting main loop.";
