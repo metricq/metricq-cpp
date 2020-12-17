@@ -51,7 +51,10 @@ public:
     void on_data(const std::string& id, const metricq::DataChunk& chunk) override
     {
         auto& d = data_.at(id);
-        for (const auto& tv : chunk)
+        // clang was rightfully complaining about the following line. The DataChunkIter,
+        // which is the underlying type used for iteration constructs each element on
+        // the fly. Thus, there is always a copy here.
+        for (const auto tv : chunk)
         {
             d.emplace_back(tv);
         }
