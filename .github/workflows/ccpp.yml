@@ -23,6 +23,8 @@ jobs:
       env:
         CXX: ${{ matrix.compiler }}
       run: cmake .
+    - uses: ammaraskar/gcc-problem-matcher@master
+      if: ${{ startsWith( matrix.compiler, 'g++') }}
     - name: Build
       run: make
     - name: Run CTest
