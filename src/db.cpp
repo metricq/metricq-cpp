@@ -105,7 +105,14 @@ HistoryResponse Db::on_history(const std::string&, const metricq::HistoryRequest
 void Db::on_history(const std::string& id, const metricq::HistoryRequest& content,
                     metricq::Db::HistoryCompletion complete)
 {
-    complete(on_history(id, content));
+    try
+    {
+        complete(on_history(id, content));
+    }
+    catch (std::exception& e)
+    {
+        complete.failed(id, e.what());
+    }
 }
 
 void Db::HistoryCompletion::operator()(const metricq::HistoryResponse& response)
@@ -130,6 +137,16 @@ void Db::HistoryCompletion::operator()(const metricq::HistoryResponse& response)
         self.data_channel_->publish("", reply_to, envelope);
     };
     asio::dispatch(self.io_service, run);
+}
+
+void Db::HistoryCompletion::failed(const std::string& metric, const std::string& error_msg)
+{
+    metricq::HistoryResponse response;
+
+    response.set_metric(metric);
+    response.set_error(error_msg);
+
+    (*this)(response);
 }
 
 void Db::on_connected()

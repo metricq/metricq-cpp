@@ -107,6 +107,8 @@ protected:
 
         void operator()(const HistoryResponse& response);
 
+        void failed(const std::string& metric, const std::string& msg);
+
     private:
         Db& self;
         std::string correlation_id;
