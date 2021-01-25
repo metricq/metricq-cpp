@@ -60,6 +60,7 @@ protected:
                                      const HistoryResponseValueView& response) = 0;
     virtual void on_history_response(const std::string& id,
                                      const HistoryResponseAggregateView& response) = 0;
+    virtual void on_history_response(const std::string& id, const std::string& error) = 0;
     virtual void on_history_config(const json& config) = 0;
     virtual void on_history_ready() = 0;
 

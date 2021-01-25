@@ -51,6 +51,7 @@ private:
                              const metricq::HistoryResponseValueView& response) override;
     void on_history_response(const std::string& metric,
                              const metricq::HistoryResponseAggregateView& response) override;
+    void on_history_response(const std::string& metric, const std::string& error) override;
 
     std::vector<std::string> metrics_;
     asio::signal_set signals_;
