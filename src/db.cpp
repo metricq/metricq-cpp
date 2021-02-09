@@ -105,14 +105,7 @@ HistoryResponse Db::on_history(const std::string&, const metricq::HistoryRequest
 void Db::on_history(const std::string& id, const metricq::HistoryRequest& content,
                     metricq::Db::HistoryCompletion complete)
 {
-    try
-    {
-        complete(on_history(id, content));
-    }
-    catch (std::exception& e)
-    {
-        complete.failed(id, e.what());
-    }
+    complete(on_history(id, content));
 }
 
 void Db::HistoryCompletion::operator()(const metricq::HistoryResponse& response)
