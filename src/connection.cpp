@@ -332,7 +332,7 @@ void Connection::stop()
     // the io_service will stop itself once all connections are closed
 }
 
-std::string Connection::client_version() const
+std::string Connection::version() const
 {
     return {};
 }
@@ -350,7 +350,7 @@ json Connection::handle_discover_rpc(const json&)
                       { "uptime", uptime },
                       { "metricqVersion", metricq::version() } };
 
-    if (auto version = client_version(); !version.empty())
+    if (auto version = this->version(); !version.empty())
     {
         response["version"] = version;
     }

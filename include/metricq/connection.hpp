@@ -128,7 +128,7 @@ protected:
 
     AMQP::Address derive_address(const std::string& address);
 
-    virtual std::string client_version() const;
+    virtual std::string version() const;
     virtual json handle_discover_rpc(const json&);
 
 private:
