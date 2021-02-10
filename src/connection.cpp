@@ -187,7 +187,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 {
     const std::string content_str(incoming_message.body(),
                                   static_cast<size_t>(incoming_message.bodySize()));
-    log::debug("Management message received: {}", content_str);
+    log::debug("Management message received: {}", truncate_string(content_str, 100));
 
     auto content = json::parse(content_str);
 
