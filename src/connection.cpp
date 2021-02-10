@@ -256,7 +256,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 
     if (auto it = rpc_callbacks_.find(function); it != rpc_callbacks_.end())
     {
-        log::debug("management rpc call received: {}", content_str);
+        log::debug("management rpc call received: {}", truncate_string(content_str,100));
         // incoming message is a RPC-call
 
         try
