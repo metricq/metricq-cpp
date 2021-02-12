@@ -54,7 +54,7 @@ DummySink::DummySink(const std::string& manager_host, const std::string& token,
         }
         Log::info() << "Caught signal " << signal << ". Shutdown.";
         rpc("sink.unsubscribe", [this](const auto&) { (void)this; },
-            { { "dataQueue", data_queue_ }, { "metrics", metrics_ } });
+            { { "dataQueue", data_queue() }, { "metrics", metrics_ } });
         timer_.cancel();
         timeout_timer_.cancel();
     });
@@ -137,7 +137,7 @@ void DummySink::on_data(const AMQP::Message& message, uint64_t delivery_tag, boo
         Log::debug() << "received end message";
         // We used to close the data connection here, but this should not be necessary.
         // It will be closed implicitly from the response callback.
-        rpc("sink.release", [this](const auto&) { close(); }, { { "dataQueue", data_queue_ } });
+        rpc("sink.release", [this](const auto&) { close(); }, { { "dataQueue", data_queue() } });
         return;
     }
 

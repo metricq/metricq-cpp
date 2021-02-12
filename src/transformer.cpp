@@ -67,11 +67,9 @@ void Transformer::subscribe_metrics()
     }
     rpc("transformer.subscribe",
         [this](const json& response) {
-            if (this->data_queue_.empty())
-            {
-                this->sink_config(response);
-            }
-            if (this->data_queue_ != response.at("dataQueue"))
+            this->sink_config(response);
+
+            if (this->data_queue() != response.at("dataQueue"))
             {
                 throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
             }

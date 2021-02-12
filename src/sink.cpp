@@ -54,11 +54,9 @@ void Sink::subscribe(const std::vector<std::string>& metrics, int64_t expires)
 {
     rpc("sink.subscribe",
         [this](const json& response) {
-            if (this->data_queue_.empty())
-            {
-                this->sink_config(response);
-            }
-            if (this->data_queue_ != response.at("dataQueue"))
+            this->sink_config(response);
+
+            if (this->data_queue() != response.at("dataQueue"))
             {
                 throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
             }
@@ -70,53 +68,26 @@ void Sink::sink_config(const json& config)
 {
     data_config(config);
 
-    if (data_queue_.empty())
-    {
-        // Set data queue name from configuration.
-        data_queue_ = config.at("dataQueue").get<std::string>();
-    }
-    else
-    {
-        // If data_queue_ has already been set (for example from Drain), check
-        // that the local name matches the one in the configuration provided.
-        auto config_data_queue = config.at("dataQueue").get<std::string>();
+    data_queue(config.at("dataQueue").get<std::string>());
 
-        if (data_queue_ != config_data_queue)
-        {
-            log::warn("configuration indicated to use data queue {}, but we expected {}.",
-                      config_data_queue, data_queue_);
-            log::warn("using queue provided by configuration");
-            data_queue_ = config_data_queue;
-        }
-    }
-
-    if (config.count("metrics"))
-    {
-        const auto& metrics_metadata = config.at("metrics");
-        for (auto it = metrics_metadata.begin(); it != metrics_metadata.end(); ++it)
-        {
-            if (it.value().is_object())
-            {
-                metadata_.emplace(it.key(), it.value());
-            }
-            else
-            {
-                log::warn("missing metadata for metric {}", it.key());
-            }
-        }
-    }
+    update_metadata(config);
 
     setup_data_queue();
 }
 
 void Sink::setup_data_queue()
 {
+    if (is_data_queue_set_up_)
+    {
+        return;
+    }
+
     // Ensure that we are not flooded by requests and forget to send out heartbeat
     // TODO configurable!
     data_channel_->setQos(400);
-    assert(!data_queue_.empty());
+    assert(!data_queue().empty());
 
-    data_channel_->declareQueue(data_queue_, AMQP::passive)
+    data_channel_->declareQueue(data_queue(), AMQP::passive)
         .onSuccess(std::bind(&Sink::setup_data_consumer, this, std::placeholders::_1,
                              std::placeholders::_2, std::placeholders::_3));
 }
@@ -136,7 +107,10 @@ void Sink::setup_data_consumer(const std::string& name, int message_count, int c
 
     data_channel_->consume(name)
         .onReceived(message_cb)
-        .onSuccess(debug_success_cb("sink data queue consume success"))
+        .onSuccess([this]() {
+            this->is_data_queue_set_up_ = true;
+            log::debug("sink data queue consume success");
+        })
         .onError(debug_error_cb("sink data queue consume error"))
         .onFinalize([]() { log::info("sink data queue consume finalize"); });
 }
@@ -172,6 +146,40 @@ void Sink::on_data(const std::string&, TimeValue)
 {
     log::fatal("unhandled TimeValue data, implementation error.");
     std::abort();
+}
+
+void Sink::data_queue(const std::string& name)
+{
+    if (name.empty())
+    {
+        throw std::runtime_error("Trying to set data_queue name to empty string.");
+    }
+
+    if (data_queue_.empty())
+    {
+        assert(!is_data_queue_set_up_);
+        data_queue_ = name;
+        return;
+    }
+
+    if (data_queue_ == name)
+    {
+        return;
+    }
+
+    if (is_data_queue_set_up_)
+    {
+        log::error("Requested to change data_queue to '{}', but the data_queue '{}' is already "
+                   "setup for consumption.",
+                   name, data_queue_);
+        throw std::runtime_error(
+            "Trying to change data_queue, but data consumption has already started.");
+    }
+
+    log::warn("Requested to change data_queue to '{}', but the data_queue '{}' is already set.",
+              name, data_queue_);
+
+    data_queue_ = name;
 }
 
 } // namespace metricq
