@@ -99,7 +99,7 @@ void Sink::setup_data_consumer(const std::string& name, int message_count, int c
     // we do not tolerate other consumers
     if (consumer_count != 0)
     {
-        log::fatal("unexpected consumer count {} - are we not alone in the queue?", consumer_count);
+        log::warn("unexpected consumer count {} - are we not alone in the queue?", consumer_count);
     }
 
     auto message_cb = [this](const AMQP::Message& message, uint64_t delivery_tag,
