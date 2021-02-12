@@ -40,6 +40,8 @@
 #include <metricq/logger.hpp>
 #include <metricq/utils.hpp>
 
+#include <asio/ip/host_name.hpp>
+
 #include <amqpcpp.h>
 
 #include <iostream>
@@ -330,6 +332,11 @@ void Connection::stop()
     // the io_service will stop itself once all connections are closed
 }
 
+std::string Connection::version() const
+{
+    return {};
+}
+
 json Connection::handle_discover_rpc(const json&)
 {
     auto current_time = Clock::now();
@@ -337,11 +344,28 @@ json Connection::handle_discover_rpc(const json&)
         std::chrono::duration_cast<std::chrono::duration<double>>(current_time - starting_time_)
             .count();
 
-    return { { "alive", true },
-             { "currentTime", Clock::format_iso(current_time) },
-             { "startingTime", Clock::format_iso(starting_time_) },
-             { "uptime", uptime },
-             { "metricqVersion", metricq::version() } };
+    json response = { { "alive", true },
+                      { "currentTime", Clock::format_iso(current_time) },
+                      { "startingTime", Clock::format_iso(starting_time_) },
+                      { "uptime", uptime },
+                      { "metricqVersion", metricq::version() } };
+
+    if (auto version = this->version(); !version.empty())
+    {
+        response["version"] = version;
+    }
+
+    try
+    {
+        auto hostname = asio::ip::host_name();
+        response["hostname"] = hostname;
+    }
+    catch (asio::system_error& e)
+    {
+        log::error("Couldn't get hostname for system: {}", e.what());
+    }
+
+    return response;
 }
 
 } // namespace metricq
