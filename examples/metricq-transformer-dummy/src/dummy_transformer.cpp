@@ -80,7 +80,7 @@ void DummyTransformer::on_transformer_config(const metricq::json& config)
 
         Log::info() << "Transforming " << in_id << " to " << out_id << " with factor " << factor;
 
-        input_metrics.push_back(in_id);
+        input_metrics.emplace(in_id);
         metric_info[in_id] = { out_id, factor };
         (*this)[out_id];
     }
