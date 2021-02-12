@@ -115,6 +115,25 @@ void Sink::setup_data_consumer(const std::string& name, int message_count, int c
         .onFinalize([]() { log::info("sink data queue consume finalize"); });
 }
 
+void Sink::update_metadata(const json& config)
+{
+    if (config.count("metrics"))
+    {
+        const auto& metrics_metadata = config.at("metrics");
+        for (auto it = metrics_metadata.begin(); it != metrics_metadata.end(); ++it)
+        {
+            if (it.value().is_object())
+            {
+                metadata_.emplace(it.key(), it.value());
+            }
+            else
+            {
+                log::warn("missing metadata for metric {}", it.key());
+            }
+        }
+    }
+}
+
 void Sink::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
 {
     (void)redelivered;

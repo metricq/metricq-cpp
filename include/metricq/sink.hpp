@@ -67,6 +67,8 @@ protected:
 
     void sink_config(const json& config);
 
+    void update_metadata(const json& config);
+
     void subscribe(const std::vector<std::string>& metrics, int64_t expires = 0);
 
     void data_queue(const std::string& name);
