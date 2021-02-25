@@ -125,3 +125,12 @@ void DummyHistory::on_history_response(const std::string& id,
 
     io_service.post([this]() { this->stop(); });
 }
+
+void DummyHistory::on_history_response(const std::string& id, const std::string& msg)
+{
+    Log::debug() << "DummyHistory::on_history_response() called";
+
+    Log::fatal() << "HistoryRequest(" << id << ") failed: " << msg;
+
+    io_service.post([this]() { this->stop(); });
+}
