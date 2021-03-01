@@ -85,7 +85,7 @@ private:
     void setup_data_consumer(const std::string& name, int message_count, int consumer_count);
 
 protected:
-    // This is the data_queue that will alter be used for data consumption
+    // This is the data_queue that will be used for data consumption
     std::string data_queue_;
     // Stored permanently to avoid expensive allocations
     DataChunk data_chunk_;
