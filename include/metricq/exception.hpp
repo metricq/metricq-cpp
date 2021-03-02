@@ -30,20 +30,30 @@
 
 #pragma once
 
-#include <exception>
+#include <stdexcept>
 
 namespace metricq
 {
-class Exception : public std::exception
+class Exception : public std::runtime_error
 {
 public:
-    using std::exception::exception;
+    using std::runtime_error::runtime_error;
+};
+
+class ConnectionError : public Exception
+{
+public:
+    using Exception::Exception;
 };
 
 class RPCError : public Exception
 {
 public:
     using Exception::Exception;
+
+    RPCError() : Exception("RPC error")
+    {
+    }
 };
 
 } // namespace metricq

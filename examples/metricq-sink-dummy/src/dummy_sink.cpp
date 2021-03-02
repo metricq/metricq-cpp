@@ -104,7 +104,7 @@ void DummySink::on_data_channel_ready()
         timeout_timer_.start(
             [this](std::error_code) {
                 Log::error() << "Data timeout! Didn't receive data in " << this->timeout_ << " ns.";
-                throw metricq::Exception();
+                throw metricq::Exception("Request timeout");
 
                 return metricq::Timer::TimerResult::cancel;
             },

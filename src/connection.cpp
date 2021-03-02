@@ -106,7 +106,11 @@ void Connection::connect(const std::string& server_address)
                           [[maybe_unused]] int consumercount) {
             management_channel_
                 ->bindQueue(management_broadcast_exchange_, management_client_queue_, "#")
-                .onError(debug_error_cb("error binding management queue to broadcast exchange"))
+                .onError([this, name](auto message) {
+                    log::error("error binding management queue to broadcast exchange: {}", message);
+                    throw std::runtime_error(
+                        "Couldn't bind the management queue to the broadcast exchange");
+                })
                 .onSuccess([this, name]() {
                     management_channel_->consume(name)
                         .onReceived([this](const AMQP::Message& message, uint64_t delivery_tag,
