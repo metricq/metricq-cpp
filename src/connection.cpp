@@ -97,7 +97,10 @@ void Connection::connect(const std::string& server_address)
     management_connection_->connect(*management_address_);
     management_channel_ = management_connection_->make_channel();
     management_channel_->onReady(debug_success_cb("management channel ready"));
-    management_channel_->onError(debug_error_cb("management channel error"));
+    management_channel_->onError([](auto message) {
+        log::error("management channel error: {}", message);
+        throw std::runtime_error(message);
+    });
 
     management_client_queue_ = connection_token_ + "-rpc";
 
