@@ -195,7 +195,8 @@ void Sink::data_queue(const std::string& name)
             "Trying to change data_queue, but data consumption has already started.");
     }
 
-    log::warn("Requested to change data_queue to '{}', but the data_queue '{}' is already set.",
+    log::warn("Requested to change data_queue to '{}', but the data_queue '{}' is already set"
+              " (but not consuming).",
               name, data_queue_);
 
     data_queue_ = name;
