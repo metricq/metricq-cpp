@@ -126,13 +126,13 @@ void Db::db_subscribe(const json& metrics)
     // TODO reduce redundancy with Sink::subscribe
     rpc("db.subscribe",
         [this](const json& response) {
-            if (this->data_queue_.empty() || this->history_queue_.empty())
+            if (this->data_queue().empty() || this->history_queue_.empty())
             {
                 // Data queue should really be filled already by the db.register
                 throw std::runtime_error(
                     "data_queue or history_queue empty upon db.subscribe return");
             }
-            if (this->data_queue_ != response.at("dataQueue") ||
+            if (this->data_queue() != response.at("dataQueue") ||
                 this->history_queue_ != response.at("historyQueue"))
             {
                 throw std::runtime_error(
