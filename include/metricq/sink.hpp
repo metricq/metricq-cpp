@@ -96,7 +96,16 @@ protected:
 
     void sink_config(const json& config);
 
+    void update_metadata(const json& config);
+
     void subscribe(const std::vector<std::string>& metrics, int64_t expires = 0);
+
+    void data_queue(const std::string& name);
+
+    const std::string& data_queue() const
+    {
+        return data_queue_;
+    }
 
     void setup_data_queue();
 
@@ -106,9 +115,14 @@ private:
     void setup_data_consumer(const std::string& name, int message_count, int consumer_count);
 
 protected:
+    // This is the data_queue that will be used for data consumption
     std::string data_queue_;
     // Stored permanently to avoid expensive allocations
     DataChunk data_chunk_;
     std::unordered_map<std::string, Metadata> metadata_;
+
+private:
+    // The data_queue is already setup for the data consumption
+    bool is_data_queue_set_up_ = false;
 };
 } // namespace metricq

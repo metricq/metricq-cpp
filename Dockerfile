@@ -24,7 +24,7 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j 2
 RUN make package
 
 
-FROM ubuntu:eoan
+FROM ubuntu:latest
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y libssl1.1 libprotobuf17 tzdata

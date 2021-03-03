@@ -5,12 +5,13 @@ on: [push]
 
 jobs:
   build-ubuntu:
-
-    runs-on: ubuntu-latest
-
     strategy:
+      fail-fast: false
       matrix:
-        compiler: [g++-7, g++-8, g++-9, clang++-6.0, clang++-8, clang++-9]
+        os: [ubuntu-20.04]
+        compiler: [g++-7, g++-8, g++-9, g++-10, clang++-8, clang++-9, clang++-10]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v2
@@ -22,6 +23,8 @@ jobs:
       env:
         CXX: ${{ matrix.compiler }}
       run: cmake .
+    - uses: ammaraskar/gcc-problem-matcher@master
+      if: ${{ startsWith( matrix.compiler, 'g++') }}
     - name: Build
       run: make
     - name: Run CTest

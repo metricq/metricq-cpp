@@ -31,6 +31,8 @@
 #include <metricq/json.hpp>
 #include <metricq/transformer.hpp>
 
+#include <cassert>
+
 namespace metricq
 {
 Transformer::Transformer(const std::string& token) : Sink(token)
@@ -67,15 +69,9 @@ void Transformer::subscribe_metrics()
     }
     rpc("transformer.subscribe",
         [this](const json& response) {
-            if (this->data_queue_.empty())
-            {
-                this->sink_config(response);
-                this->setup_data_queue();
-            }
-            if (this->data_queue_ != response.at("dataQueue"))
-            {
-                throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
-            }
+            this->sink_config(response);
+
+            assert(this->data_queue() == response.at("dataQueue"));
 
             on_transformer_ready();
             declare_metrics();

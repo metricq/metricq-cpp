@@ -200,13 +200,20 @@ void HistoryClient::close()
 
 void HistoryClient::on_history_response(const std::string& id, const HistoryResponse& response)
 {
-    if (response.value_size() > 0)
+    if (!response.error().empty())
     {
-        on_history_response(id, HistoryResponseValueView(response));
+        on_history_response(id, response.error());
     }
     else
     {
-        on_history_response(id, HistoryResponseAggregateView(response));
+        if (response.value_size() > 0)
+        {
+            on_history_response(id, HistoryResponseValueView(response));
+        }
+        else
+        {
+            on_history_response(id, HistoryResponseAggregateView(response));
+        }
     }
 }
 

@@ -41,7 +41,7 @@ class Drain : public Sink
 public:
     Drain(const std::string& token, const std::string& queue) : Sink(token, true)
     {
-        data_queue_ = queue;
+        data_queue(queue);
     }
     virtual ~Drain() = 0;
 

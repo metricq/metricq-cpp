@@ -32,8 +32,8 @@
 #include <metricq/metric.hpp>
 #include <metricq/sink.hpp>
 
+#include <set>
 #include <unordered_map>
-#include <vector>
 
 namespace metricq
 {
@@ -73,6 +73,6 @@ private:
     std::unordered_map<std::string, Metric> output_metrics_;
 
 protected:
-    std::vector<std::string> input_metrics;
+    std::set<std::string> input_metrics;
 };
 } // namespace metricq

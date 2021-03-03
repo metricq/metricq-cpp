@@ -72,4 +72,13 @@ final_action<F> finally(F&& f) noexcept
 {
     return final_action<F>(std::forward<F>(f));
 }
+
+inline std::string truncate_string(const std::string& in, std::size_t max_width)
+{
+    if (in.length() <= max_width)
+    {
+        return in;
+    }
+    return in.substr(0, max_width - 6) + " [...]";
+}
 } // namespace metricq

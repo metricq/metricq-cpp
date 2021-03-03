@@ -40,6 +40,8 @@
 #include <metricq/logger.hpp>
 #include <metricq/utils.hpp>
 
+#include <asio/ip/host_name.hpp>
+
 #include <amqpcpp.h>
 
 #include <iostream>
@@ -95,7 +97,10 @@ void Connection::connect(const std::string& server_address)
     management_connection_->connect(*management_address_);
     management_channel_ = management_connection_->make_channel();
     management_channel_->onReady(debug_success_cb("management channel ready"));
-    management_channel_->onError(debug_error_cb("management channel error"));
+    management_channel_->onError([](auto message) {
+        log::error("management channel error: {}", message);
+        throw std::runtime_error(message);
+    });
 
     management_client_queue_ = connection_token_ + "-rpc";
 
@@ -104,7 +109,11 @@ void Connection::connect(const std::string& server_address)
                           [[maybe_unused]] int consumercount) {
             management_channel_
                 ->bindQueue(management_broadcast_exchange_, management_client_queue_, "#")
-                .onError(debug_error_cb("error binding management queue to broadcast exchange"))
+                .onError([name](auto message) {
+                    log::error("error binding management queue to broadcast exchange: {}", message);
+                    throw std::runtime_error(
+                        "Couldn't bind the management queue to the broadcast exchange");
+                })
                 .onSuccess([this, name]() {
                     management_channel_->consume(name)
                         .onReceived([this](const AMQP::Message& message, uint64_t delivery_tag,
@@ -187,7 +196,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 {
     const std::string content_str(incoming_message.body(),
                                   static_cast<size_t>(incoming_message.bodySize()));
-    log::debug("Management message received: {}", content_str);
+    log::debug("Management message received: {}", truncate_string(content_str, 100));
 
     auto content = json::parse(content_str);
 
@@ -256,7 +265,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 
     if (auto it = rpc_callbacks_.find(function); it != rpc_callbacks_.end())
     {
-        log::debug("management rpc call received: {}", content_str);
+        log::debug("management rpc call received: {}", truncate_string(content_str, 100));
         // incoming message is a RPC-call
 
         try
@@ -330,6 +339,11 @@ void Connection::stop()
     // the io_service will stop itself once all connections are closed
 }
 
+std::string Connection::version() const
+{
+    return {};
+}
+
 json Connection::handle_discover_rpc(const json&)
 {
     auto current_time = Clock::now();
@@ -337,11 +351,28 @@ json Connection::handle_discover_rpc(const json&)
         std::chrono::duration_cast<std::chrono::duration<double>>(current_time - starting_time_)
             .count();
 
-    return { { "alive", true },
-             { "currentTime", Clock::format_iso(current_time) },
-             { "startingTime", Clock::format_iso(starting_time_) },
-             { "uptime", uptime },
-             { "metricqVersion", metricq::version() } };
+    json response = { { "alive", true },
+                      { "currentTime", Clock::format_iso(current_time) },
+                      { "startingTime", Clock::format_iso(starting_time_) },
+                      { "uptime", uptime },
+                      { "metricqVersion", metricq::version() } };
+
+    if (auto version = this->version(); !version.empty())
+    {
+        response["version"] = version;
+    }
+
+    try
+    {
+        auto hostname = asio::ip::host_name();
+        response["hostname"] = hostname;
+    }
+    catch (asio::system_error& e)
+    {
+        log::error("Couldn't get hostname for system: {}", e.what());
+    }
+
+    return response;
 }
 
 } // namespace metricq
