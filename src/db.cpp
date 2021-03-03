@@ -132,6 +132,16 @@ void Db::HistoryCompletion::operator()(const metricq::HistoryResponse& response)
     asio::dispatch(self.io_service, run);
 }
 
+void Db::HistoryCompletion::failed(const std::string& metric, const std::string& error_msg)
+{
+    metricq::HistoryResponse response;
+
+    response.set_metric(metric);
+    response.set_error(error_msg);
+
+    (*this)(response);
+}
+
 void Db::on_connected()
 {
     rpc("db.register", [this](const auto& response) { on_register_response(response); });
