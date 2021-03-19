@@ -112,6 +112,13 @@ void Db::HistoryCompletion::operator()(const metricq::HistoryResponse& response)
 {
     std::string reply_message = response.SerializeAsString();
     auto processing_duration = Clock::now() - begin_processing_;
+    if (processing_duration > std::chrono::seconds(1))
+    {
+        log::warn(
+            "on_history took {} s. Requesting token: {}",
+            std::chrono::duration_cast<std::chrono::duration<float>>(processing_duration).count(),
+            reply_to);
+    }
     auto run = [processing_duration, begin_handling = this->begin_handling_,
                 reply_message = std::move(reply_message),
                 correlation_id = std::move(correlation_id), reply_to = std::move(reply_to),
