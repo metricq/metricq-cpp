@@ -40,14 +40,16 @@ namespace metricq
 {
 Db::Db(const std::string& token) : Sink(token)
 {
-    register_rpc_callback("config", [this](const json& config) {
-        on_db_config(config, ConfigCompletion(*this, false));
-        // Unfortunately we must send the response now because of how the management callback stuff
-        // is working. Technically, a threaded DB could wait for the event of another thread here.
-        // Hopefully ... coroutines soon
-        // Subscription is handled by the completion
-        return json::object();
-    });
+    register_rpc_callback(
+        "config",
+        [this](const json& config) {
+            on_db_config(config, ConfigCompletion(*this, false));
+            // Unfortunately we must send the response now because of how the management callback
+            // stuff is working. Technically, a threaded DB could wait for the event of another
+            // thread here. Hopefully ... coroutines soon Subscription is handled by the completion
+            return json::object();
+        },
+        json({}), std::chrono::seconds(300));
 }
 
 void Db::setup_history_queue(const AMQP::QueueCallback& callback)
@@ -199,7 +201,8 @@ void Db::setup_history_queue()
 void Db::db_subscribe(const json& metrics)
 {
     // TODO reduce redundancy with Sink::subscribe
-    rpc("db.subscribe",
+    rpc(
+        "db.subscribe",
         [this](const json& response) {
             if (this->data_queue().empty() || this->history_queue_.empty())
             {
@@ -214,6 +217,6 @@ void Db::db_subscribe(const json& metrics)
                     "inconsistent dataQueue or historyQueue from db.subscribe");
             }
         },
-        { { "metrics", metrics }, { "metadata", false } });
+        { { "metrics", metrics }, { "metadata", false } }, std::chrono::seconds(300));
 }
 } // namespace metricq
