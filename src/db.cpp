@@ -40,16 +40,13 @@ namespace metricq
 {
 Db::Db(const std::string& token) : Sink(token)
 {
-    register_rpc_callback(
-        "config",
-        [this](const json& config) {
-            on_db_config(config, ConfigCompletion(*this, false));
-            // Unfortunately we must send the response now because of how the management callback
-            // stuff is working. Technically, a threaded DB could wait for the event of another
-            // thread here. Hopefully ... coroutines soon Subscription is handled by the completion
-            return json::object();
-        },
-        json({}), std::chrono::seconds(300));
+    register_rpc_callback("config", [this](const json& config) {
+        on_db_config(config, ConfigCompletion(*this, false));
+        // Unfortunately we must send the response now because of how the management callback
+        // stuff is working. Technically, a threaded DB could wait for the event of another
+        // thread here. Hopefully ... coroutines soon Subscription is handled by the completion
+        return json::object();
+    });
 }
 
 void Db::setup_history_queue(const AMQP::QueueCallback& callback)
@@ -153,7 +150,9 @@ void Db::HistoryCompletion::failed(const std::string& metric, const std::string&
 
 void Db::on_connected()
 {
-    rpc("db.register", [this](const auto& response) { on_register_response(response); });
+    rpc(
+        "db.register", [this](const auto& response) { on_register_response(response); }, json({}),
+        std::chrono::seconds(300));
 }
 
 void Db::on_register_response(const json& response)
