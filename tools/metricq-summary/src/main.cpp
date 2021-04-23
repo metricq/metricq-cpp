@@ -29,7 +29,7 @@
 #include "run_command.hpp"
 #include "summary.hpp"
 
-#include <nitro/broken_options/parser.hpp>
+#include <nitro/options/parser.hpp>
 
 #include <metricq/logger/nitro.hpp>
 #include <metricq/ostream.hpp>
@@ -58,7 +58,7 @@ Config::Config(int argc, const char* argv[])
 {
     metricq::logger::nitro::set_severity(nitro::log::severity_level::info);
 
-    nitro::broken_options::parser parser;
+    nitro::options::parser parser;
     parser.option("server", "The metricq management server to connect to.")
         .default_value("amqp://localhost")
         .env("METRICQ_SERVER")
@@ -75,7 +75,7 @@ Config::Config(int argc, const char* argv[])
     parser.toggle("help").short_name("h");
 
     parser.accept_positionals();
-    parser.positional_name("command [args]");
+    parser.positional_metavar("command [args]");
 
     try
     {
@@ -144,7 +144,7 @@ Config::Config(int argc, const char* argv[])
             std::exit(EXIT_FAILURE);
         }
     }
-    catch (nitro::broken_options::parsing_error& e)
+    catch (nitro::options::parsing_error& e)
     {
         std::cerr << "Error parsing arguments: " << e.what() << '\n';
         parser.usage();

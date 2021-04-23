@@ -11,6 +11,7 @@ target_link_libraries(metricq-transformer-dummy
         metricq::transformer
         metricq::logger-nitro
         Nitro::core
+        Nitro::options
 )
 
 install(TARGETS metricq-transformer-dummy RUNTIME DESTINATION bin)
