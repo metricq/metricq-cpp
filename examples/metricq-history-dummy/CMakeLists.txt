@@ -10,7 +10,7 @@ target_link_libraries(metricq-history-dummy
     PRIVATE
         metricq::history
         metricq::logger-nitro
-        Nitro::broken-options
+        Nitro::options
 )
 
 install(TARGETS metricq-history-dummy RUNTIME DESTINATION bin)

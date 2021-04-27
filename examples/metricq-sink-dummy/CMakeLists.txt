@@ -10,7 +10,7 @@ target_link_libraries(metricq-sink-dummy
     PRIVATE
         metricq::sink
         metricq::logger-nitro
-        Nitro::broken-options
+        Nitro::options
 )
 
 install(TARGETS metricq-sink-dummy RUNTIME DESTINATION bin)

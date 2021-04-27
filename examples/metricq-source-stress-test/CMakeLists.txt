@@ -10,7 +10,7 @@ target_link_libraries(metricq-source-stress-test
     PRIVATE
         metricq::source
         metricq::logger-nitro
-        Nitro::broken-options
+        Nitro::options
 )
 
 install(TARGETS metricq-source-stress-test RUNTIME DESTINATION bin)
