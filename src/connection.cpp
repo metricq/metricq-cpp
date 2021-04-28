@@ -256,9 +256,10 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 
     if (content.count("function") != 1)
     {
-        log::error("error in rpc: no function but also no response callback: {}\n{}",
+        log::error("error in rpc: ignoring message that is neither a request nor an expected "
+                   "response: {}\n{}",
                    incoming_message.correlationID(), content_str);
-        throw RPCError();
+        return;
     }
 
     auto function = content.at("function").get<std::string>();
