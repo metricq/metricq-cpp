@@ -30,7 +30,7 @@
 
 #include <metricq/logger/nitro.hpp>
 
-#include <nitro/broken_options/parser.hpp>
+#include <nitro/options/parser.hpp>
 
 #include <iostream>
 #include <string>
@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
 {
     metricq::logger::nitro::set_severity(nitro::log::severity_level::info);
 
-    nitro::broken_options::parser parser;
+    nitro::options::parser parser;
     parser.option("server", "The metricq management server to connect to.")
         .default_value("amqp://localhost")
         .short_name("s");
@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
         transformer.main_loop();
         Log::info() << "exiting main loop.";
     }
-    catch (nitro::broken_options::parsing_error& e)
+    catch (nitro::options::parsing_error& e)
     {
         std::cerr << e.what() << '\n';
         parser.usage();
