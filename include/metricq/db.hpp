@@ -31,6 +31,7 @@
 
 #include <metricq/history.pb.h>
 #include <metricq/json.hpp>
+#include <metricq/metric.hpp>
 #include <metricq/sink.hpp>
 
 #include <functional>
@@ -51,6 +52,8 @@ namespace metricq
 class Db : public Sink
 {
 public:
+    using Metric = metricq::Metric<Db>;
+
     Db(const std::string& token);
 
 protected:
@@ -65,8 +68,11 @@ protected:
 
     public:
         ConfigCompletion(const ConfigCompletion&) = delete;
+
         ConfigCompletion(ConfigCompletion&&) = default;
+
         ConfigCompletion& operator=(const ConfigCompletion&) = delete;
+
         ConfigCompletion& operator=(ConfigCompletion&&) = delete;
 
         // We take by value so we can move around without worrying about lifetime when dispatcing
@@ -96,8 +102,11 @@ protected:
          */
     public:
         HistoryCompletion(const HistoryCompletion&) = delete;
+
         HistoryCompletion(HistoryCompletion&&) = default;
+
         HistoryCompletion& operator=(const HistoryCompletion&) = delete;
+
         HistoryCompletion& operator=(HistoryCompletion&&) = delete;
 
         void begin_processing()
@@ -126,11 +135,13 @@ protected:
      * This can be enforced e.g. by owning all threads in the subclass of Db.
      */
     virtual void on_db_config(const json& config, ConfigCompletion complete);
+
     // returns the metrics to subscribe to
     virtual json on_db_config(const json& config);
 
     virtual void on_history(const std::string& id, const HistoryRequest& content,
                             HistoryCompletion complete);
+
     virtual HistoryResponse on_history(const std::string& id, const HistoryRequest& content);
 
     virtual void on_db_ready() = 0;
@@ -139,9 +150,11 @@ private:
     void on_history(const AMQP::Message&);
 
     void setup_history_queue();
+
     void setup_history_queue(const AMQP::QueueCallback& callback);
 
     void on_register_response(const json& response);
+
     // We keep this private to avoid confusion because this is done automatically through return of
     // on_db_config
     void db_subscribe(const json& metrics);
@@ -149,9 +162,27 @@ private:
 protected:
     void on_connected() override;
 
+public:
+    // stuff to allow DB to also send data
+    void send(const std::string& id, TimeValue tv);
+
+    void send(const std::string& id, const DataChunk& dc);
+
+    void declare_metrics();
+
+    Metric& output_metric(const std::string& id)
+    {
+        auto ret = output_metrics_.try_emplace(id, id, *this);
+        return ret.first->second;
+    }
+
 protected:
     std::string history_queue_;
     // Stored permanently to avoid expensive allocations
     HistoryRequest history_request_;
+
+private:
+    std::string data_exchange_;
+    std::unordered_map<std::string, Metric> output_metrics_;
 };
 } // namespace metricq
