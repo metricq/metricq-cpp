@@ -122,6 +122,27 @@ double Metadata::rate() const
     return nan("");
 }
 
+void Metadata::chunk_size(double s)
+{
+    if (s == 0.0)
+    {
+        (*this)["chunkSize"] = metricq::json{};
+    }
+    else
+    {
+        (*this)["chunkSize"] = s;
+    }
+}
+
+double Metadata::chunk_size() const
+{
+    if (metadata_.count("chunkSize"))
+    {
+        return (*this)["chunkSize"].is_null() ? 0.0 : (*this)["chunkSize"].get<double>();
+    }
+    return nan("");
+}
+
 void Metadata::scope(Metadata::Scope s)
 {
     if (s == Metadata::Scope::last)

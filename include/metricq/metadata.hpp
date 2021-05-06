@@ -64,6 +64,9 @@ public:
     void rate(double r);
     double rate() const;
 
+    void chunk_size(double);
+    double chunk_size() const;
+
     enum class Scope
     {
         last,
