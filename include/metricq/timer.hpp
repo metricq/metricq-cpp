@@ -115,7 +115,15 @@ private:
 
         if (res == TimerResult::repeat)
         {
-            timer_.expires_at(timer_.expires_at() + interval_);
+            auto deadline = timer_.expires_at() + interval_;
+
+            while (deadline <= std::chrono::system_clock::now())
+            {
+                // TODO think about logging, error reporting, or something
+                deadline += interval_;
+            }
+
+            timer_.expires_at(deadline);
             timer_.async_wait([this](auto error) { this->timer_callback(error); });
         }
         else
