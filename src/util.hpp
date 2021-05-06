@@ -31,6 +31,7 @@
 
 #include "log.hpp"
 
+#include <amqpcpp.h>
 #include <chrono>
 #include <iomanip>
 #include <random>
@@ -69,5 +70,11 @@ inline auto debug_error_cb(const std::string& prefix)
 inline auto debug_success_cb(const std::string& prefix)
 {
     return [prefix]() { log::debug("{}", prefix); };
+}
+
+inline auto redact_address_login(const AMQP::Address& address)
+{
+    return AMQP::Address(address.hostname(), address.port(), AMQP::Login("***", "***"),
+                         address.vhost(), address.secure());
 }
 } // namespace metricq
