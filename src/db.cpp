@@ -162,6 +162,7 @@ void Db::on_register_response(const json& response)
     sink_config(response);
 
     history_queue_ = response["historyQueue"].get<std::string>();
+    data_exchange_ = response["dataExchange"].get<std::string>();
 
     on_db_config(response["config"], ConfigCompletion(*this, true));
 }
@@ -195,6 +196,7 @@ void Db::setup_history_queue()
     });
 
     on_db_ready();
+    declare_metrics();
 }
 
 void Db::db_subscribe(const json& metrics)
@@ -218,4 +220,36 @@ void Db::db_subscribe(const json& metrics)
         },
         { { "metrics", metrics }, { "metadata", false } }, std::chrono::seconds(300));
 }
+
+void Db::send(const std::string& id, const DataChunk& dc)
+{
+    data_channel_->publish(data_exchange_, id, dc.SerializeAsString());
+}
+
+void Db::send(const std::string& id, TimeValue tv)
+{
+    // TODO evaluate optimization of string construction
+    data_channel_->publish(data_exchange_, id, DataChunk(tv).SerializeAsString());
+}
+
+void Db::declare_metrics()
+{
+    if (output_metrics_.empty())
+    {
+        return;
+    }
+
+    json payload;
+    for (auto& metric : output_metrics_)
+    {
+        payload["metrics"][metric.second.id()] = metric.second.metadata.json();
+    }
+    rpc(
+        "source.declare_metrics",
+        [this](const auto&) { /* nothing to do */
+                              (void)this;
+        },
+        payload);
+}
+
 } // namespace metricq
