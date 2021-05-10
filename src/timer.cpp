@@ -37,6 +37,35 @@
 
 namespace metricq
 {
+
+void Timer::start(Duration interval)
+{
+    interval_ = std::chrono::duration_cast<std::chrono::microseconds>(interval);
+
+    // As we accept nanosecond resolution durations as interval, but the timer can only support
+    // microseconds, we should check that here
+    if (interval_.count() == 0)
+    {
+        // So the duration got casted to 0us, that means we have a problem
+        throw std::invalid_argument("metricq::Timer doesn't support sub-microseconds intervals.");
+    }
+
+    restart();
+}
+
+void Timer::restart()
+{
+
+    if (interval_.count() == 0)
+    {
+        throw std::logic_error("metricq::Timer interval must be set before calling restart!");
+    }
+
+    running_ = true;
+    timer_.expires_after(interval_);
+    timer_.async_wait([this](auto error) { this->timer_callback(error); });
+}
+
 void Timer::timer_callback(std::error_code err)
 {
     // Calling start() for an already running or recently canceled timer will cancel all
