@@ -1,4 +1,4 @@
-// Copyright (c) 2018, ZIH,
+// Copyright (c) 2021, ZIH,
 // Technische Universitaet Dresden,
 // Federal Republic of Germany
 //
@@ -27,64 +27,73 @@
 // LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#pragma once
 
-#include <metricq/chrono.hpp>
+#include "log.hpp"
 
-#include <asio/basic_waitable_timer.hpp>
-#include <asio/io_service.hpp>
+#include <metricq/logger.hpp>
+#include <metricq/timer.hpp>
 
-#include <functional>
-#include <system_error>
+#include <fmt/chrono.h>
 
 namespace metricq
 {
 
-class Timer
+void Timer::start(Duration interval)
 {
-public:
-    enum class TimerResult
-    {
-        repeat,
-        cancel
-    };
+    interval_ = std::chrono::duration_cast<std::chrono::microseconds>(interval);
 
-    using Callback = std::function<TimerResult(std::error_code)>;
-
-    Timer(asio::io_service& io_service, Callback callback = Callback())
-    : timer_(io_service), callback_(callback), interval_(0)
+    // As we accept nanosecond resolution durations as interval, but the timer can only support
+    // microseconds, we should check that here
+    if (interval_.count() == 0)
     {
+        // So the duration got casted to 0us, that means we have a problem
+        throw std::invalid_argument("metricq::Timer doesn't support sub-microseconds intervals.");
     }
 
-    void start(Duration interval);
+    restart();
+}
 
-    void start(Callback callback, Duration interval)
+void Timer::restart()
+{
+
+    if (interval_.count() == 0)
     {
-        callback_ = callback;
-        start(interval);
+        throw std::logic_error("metricq::Timer interval must be set before calling restart!");
     }
 
-    void cancel()
+    running_ = true;
+    timer_.expires_after(interval_);
+    timer_.async_wait([this](auto error) { this->timer_callback(error); });
+}
+
+void Timer::timer_callback(std::error_code err)
+{
+    // Calling start() for an already running or recently canceled timer will cancel all
+    // callbacks on the event loop. So we get the error code operation_aborted here.
+    if (err == asio::error::operation_aborted)
     {
-        timer_.cancel();
+        return;
+    }
+
+    auto res = callback_(err);
+
+    if (res == TimerResult::repeat)
+    {
+        auto deadline = timer_.expires_at() + interval_;
+
+        const auto now = std::chrono::system_clock::now();
+        while (deadline <= now)
+        {
+            log::warn("Missed deadline {:%FT%T%z}, it is now {:%FT%T%z}", deadline, now);
+            deadline += interval_;
+        }
+
+        timer_.expires_at(deadline);
+        timer_.async_wait([this](auto error) { this->timer_callback(error); });
+    }
+    else
+    {
         running_ = false;
     }
-
-    void restart();
-
-    bool running() const
-    {
-        return running_;
-    }
-
-private:
-    void timer_callback(std::error_code err);
-
-private:
-    asio::basic_waitable_timer<std::chrono::system_clock> timer_;
-    Callback callback_;
-    std::chrono::microseconds interval_;
-    bool running_ = false;
-};
-
+}
 } // namespace metricq

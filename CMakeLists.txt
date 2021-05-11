@@ -73,6 +73,7 @@ set(CORE_SRCS
     src/log.cpp
     src/data_client.cpp
     src/metadata.cpp
+    src/timer.cpp
 )
 
 set(SOURCE_SRCS src/source.cpp)
