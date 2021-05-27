@@ -36,10 +36,11 @@
 
 #include <amqpcpp.h>
 
-#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <string>
+
+#include <cmath>
 
 namespace metricq
 {
@@ -97,6 +98,11 @@ void Source::declare_metrics()
     json payload;
     for (auto& metric : metrics_)
     {
+        if (std::isnan(metric.second.metadata.chunk_size()))
+        {
+            metric.second.metadata.chunk_size(metric.second.chunk_size());
+        }
+
         payload["metrics"][metric.second.id()] = metric.second.metadata.json();
     }
     rpc(
