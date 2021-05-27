@@ -100,7 +100,7 @@ void Transformer::declare_metrics()
     json payload;
     for (auto& metric : output_metrics_)
     {
-        if (!std::isnan(metric.second.metadata.chunk_size()))
+        if (std::isnan(metric.second.metadata.chunk_size()))
         {
             metric.second.metadata.chunk_size(metric.second.chunk_size());
         }

@@ -98,7 +98,7 @@ void Source::declare_metrics()
     json payload;
     for (auto& metric : metrics_)
     {
-        if (!std::isnan(metric.second.metadata.chunk_size()))
+        if (std::isnan(metric.second.metadata.chunk_size()))
         {
             metric.second.metadata.chunk_size(metric.second.chunk_size());
         }
