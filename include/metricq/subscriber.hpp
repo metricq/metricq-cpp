@@ -40,7 +40,7 @@ namespace metricq
 class Subscriber : public Connection
 {
 public:
-    explicit Subscriber(const std::string& token, Duration timeout, bool add_uuid = true);
+    explicit Subscriber(const std::string& token, Duration expires, bool add_uuid = true);
 
     void add(const std::string& metric);
     template <typename T>
@@ -62,6 +62,6 @@ protected:
 protected:
     std::vector<std::string> metrics_;
     std::string queue_;
-    Duration timeout_;
+    Duration expires_;
 };
 } // namespace metricq

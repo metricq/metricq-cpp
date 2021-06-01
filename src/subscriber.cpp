@@ -35,8 +35,8 @@
 namespace metricq
 {
 
-Subscriber::Subscriber(const std::string& token, Duration timeout, bool add_uuid)
-: Connection(token, add_uuid), timeout_(timeout)
+Subscriber::Subscriber(const std::string& token, Duration expires, bool add_uuid)
+: Connection(token, add_uuid), expires_(expires)
 {
 }
 
@@ -54,6 +54,6 @@ void Subscriber::on_connected()
         },
         { { "metrics", metrics_ },
           { "expires",
-            std::chrono::duration_cast<std::chrono::duration<double>>(timeout_).count() } });
+            std::chrono::duration_cast<std::chrono::duration<double>>(expires_).count() } });
 }
 } // namespace metricq

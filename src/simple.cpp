@@ -39,9 +39,9 @@
 namespace metricq
 {
 std::string subscribe(const std::string& url, const std::string& token,
-                      const std::vector<std::string>& metrics, Duration timeout)
+                      const std::vector<std::string>& metrics, Duration expires)
 {
-    Subscriber subscriber(token, timeout);
+    Subscriber subscriber(token, expires);
 
     subscriber.add(metrics);
     subscriber.connect(url);
@@ -50,9 +50,9 @@ std::string subscribe(const std::string& url, const std::string& token,
 }
 
 std::string subscribe(const std::string& url, const std::string& token, const std::string& metric,
-                      Duration timeout)
+                      Duration expires)
 {
-    return subscribe(url, token, std::vector<std::string>{ metric }, timeout);
+    return subscribe(url, token, std::vector<std::string>{ metric }, expires);
 }
 
 std::unordered_map<std::string, std::vector<TimeValue>>
