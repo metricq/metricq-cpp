@@ -159,7 +159,9 @@ void Db::on_register_response(const json& response)
 {
     log::debug("start parsing config");
 
-    sink_config(response);
+    data_config(response);
+    data_queue(response.at("dataQueue").get<std::string>());
+    update_metadata(response);
 
     history_queue_ = response["historyQueue"].get<std::string>();
     data_exchange_ = response["dataExchange"].get<std::string>();
