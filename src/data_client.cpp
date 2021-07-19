@@ -74,11 +74,11 @@ void DataClient::open_data_connection()
     log::debug("opening data connection to {}", redact_address_login(*data_server_address_));
     if (data_server_address_->secure())
     {
-        data_connection_ = std::make_unique<SSLConnectionHandler>(io_service, "Data connection");
+        data_connection_ = std::make_unique<SSLConnectionHandler>(io_service, "Data connection", token());
     }
     else
     {
-        data_connection_ = std::make_unique<PlainConnectionHandler>(io_service, "Data connection");
+        data_connection_ = std::make_unique<PlainConnectionHandler>(io_service, "Data connection", token());
     }
 
     data_connection_->connect(*data_server_address_);

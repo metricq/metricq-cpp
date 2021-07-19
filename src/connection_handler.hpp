@@ -75,7 +75,7 @@ private:
 class AsioConnectionHandler : public AMQP::ConnectionHandler
 {
 public:
-    AsioConnectionHandler(asio::io_service& io_service, const std::string& name);
+    AsioConnectionHandler(asio::io_service& io_service, const std::string& name, const std::string& token);
 
     /**
      *  Beware: when deriving from this class, it might be necessary to
@@ -165,6 +165,14 @@ public:
      */
     virtual void onHeartbeat(AMQP::Connection* connection) override;
 
+
+    /**
+     *  @param  connection      The connection about which information is exchanged
+     *  @param  server          Properties sent by the server
+     *  @param  client          Properties that are to be sent back
+     */
+    virtual void onProperties(AMQP::Connection *connection, const AMQP::Table &server, AMQP::Table &client) override;
+
 public:
     void connect(const AMQP::Address& address);
 
@@ -213,12 +221,13 @@ protected:
     QueuedBuffer send_buffers_;
     bool flush_in_progress_ = false;
     std::string name_;
+    std::string token_;
 };
 
 class PlainConnectionHandler : public AsioConnectionHandler
 {
 public:
-    PlainConnectionHandler(asio::io_service& io_service, const std::string& name);
+    PlainConnectionHandler(asio::io_service& io_service, const std::string& name, const std::string& token);
 
     /**
      *  @see ~AsioConnectionHandler() why this is necessary.
@@ -246,7 +255,7 @@ protected:
 class SSLConnectionHandler : public AsioConnectionHandler
 {
 public:
-    SSLConnectionHandler(asio::io_service& io_service, const std::string& name);
+    SSLConnectionHandler(asio::io_service& io_service, const std::string& name, const std::string& token);
 
     /**
      *  @see ~AsioConnectionHandler() why this is necessary.
