@@ -163,7 +163,8 @@ void HistoryClient::history_config(const json& config)
     log::debug("opening history connection to {}", *data_server_address_);
     if (data_server_address_->secure())
     {
-        history_connection_ = std::make_unique<SSLConnectionHandler>(io_service, "Hist connection", token());
+        history_connection_ =
+            std::make_unique<SSLConnectionHandler>(io_service, "Hist connection", token());
     }
     else
     {
