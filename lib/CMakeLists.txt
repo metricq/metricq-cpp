@@ -33,12 +33,15 @@ amqpcpp/src/deferredconfirm.cpp
 amqpcpp/src/deferredconsumer.cpp
 amqpcpp/src/deferredextreceiver.cpp
 amqpcpp/src/deferredget.cpp
-amqpcpp/src/deferredpublisher.cpp
+amqpcpp/src/deferredrecall.cpp
 amqpcpp/src/deferredreceiver.cpp
+amqpcpp/src/inbuffer.cpp
 amqpcpp/src/field.cpp
 amqpcpp/src/flags.cpp
 amqpcpp/src/receivedframe.cpp
 amqpcpp/src/table.cpp
+amqpcpp/src/tagger.cpp
+amqpcpp/src/throttle.cpp
 amqpcpp/src/watchable.cpp
 )
 
