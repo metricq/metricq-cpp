@@ -1,4 +1,17 @@
-add_subdirectory(json)
+include(FetchContent)
+
+FetchContent_Declare(json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.9.1)
+
+FetchContent_GetProperties(json)
+if(NOT json_POPULATED)
+  FetchContent_Populate(json)
+  set(JSON_BuildTests OFF CACHE INTERNAL "")
+  set(JSON_SystemInclude ON CACHE INTERNAL "")
+  set(JSON_MultipleHeaders ON CACHE INTERNAL "")
+  add_subdirectory(${json_SOURCE_DIR} ${json_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
 
 # Don't test external projects.
 set(ENABLE_DATE_TESTING OFF CACHE INTERNAL "" FORCE)
@@ -92,7 +105,7 @@ install(DIRECTORY amqpcpp/include/
 # BEGIN asio
 
 add_library(asio INTERFACE)
-target_include_directories(asio
+target_include_directories(asio SYSTEM
     INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/asio/asio/include>
         $<INSTALL_INTERFACE:include>
