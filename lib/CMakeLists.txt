@@ -17,10 +17,10 @@ endif()
 set(ENABLE_DATE_TESTING OFF CACHE INTERNAL "" FORCE)
 # Otherwise curl is required.
 set(USE_SYSTEM_TZ_DB ON CACHE INTERNAL "" FORCE)
+# Build the tz library
+set(BUILD_TZ_LIB ON CACHE INTERNAL "" FORCE)
 add_subdirectory(date)
-# Can be removed once this is fixed: https://github.com/HowardHinnant/date/issues/338
-target_compile_definitions(tz PRIVATE HAS_UNCAUGHT_EXCEPTIONS=1)
-set_target_properties(tz PROPERTIES POSITION_INDEPENDENT_CODE ${METRICQ_POSITION_INDEPENDENT_CODE})
+set_target_properties(date-tz PROPERTIES POSITION_INDEPENDENT_CODE ${METRICQ_POSITION_INDEPENDENT_CODE})
 
 
 include(GNUInstallDirs)
