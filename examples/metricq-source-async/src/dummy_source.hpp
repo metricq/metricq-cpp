@@ -1,6 +1,4 @@
-// Copyright (c) 2018, ZIH,
-// Technische Universitaet Dresden,
-// Federal Republic of Germany
+// Copyright (c) 2018, ZIH, Technische Universitaet Dresden, Federal Republic of Germany
 //
 // All rights reserved.
 //
@@ -27,64 +25,42 @@
 // LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 #pragma once
 
-#include <metricq/awaitable.hpp>
-#include <metricq/chrono.hpp>
-#include <metricq/data_client.hpp>
-#include <metricq/datachunk.pb.h>
-#include <metricq/json_fwd.hpp>
-#include <metricq/metric.hpp>
-#include <metricq/types.hpp>
+#include <metricq/source.hpp>
+#include <metricq/timer.hpp>
 
-#include <amqpcpp.h>
+#include <asio/signal_set.hpp>
 
-#include <memory>
-#include <optional>
-#include <string>
-#include <unordered_map>
+#include <atomic>
+#include <system_error>
 
-namespace ev
-{
-class timer;
-}
-
-namespace metricq
-{
-
-class Source : public DataClient
+class DummySource : public metricq::Source
 {
 public:
-    using Metric = metricq::Metric<Source>;
+    DummySource(const std::string& manager_host, const std::string& token,
+                metricq::Duration interval, const std::string& metric, int messages_per_chunk,
+                int chunks_to_send);
+    ~DummySource();
 
-    Source(const std::string& token);
-
-    void send(const std::string& id, TimeValue tv);
-    void send(const std::string& id, const DataChunk& dc);
-
-    Metric& operator[](const std::string& id)
-    {
-        auto ret = metrics_.try_emplace(id, id, *this);
-        return ret.first->second;
-    }
-
-protected:
-    awaitable<void> on_connected() override;
-    awaitable<void> on_data_channel_ready() override;
-
-protected:
-    virtual metricq::awaitable<void> on_source_config(const json& config) = 0;
-    virtual metricq::awaitable<void> on_source_ready() = 0;
-
-    awaitable<void> declare_metrics();
-    void clear_metrics();
+    void on_error(const std::string& message) override;
+    void on_closed() override;
 
 private:
-    awaitable<void> on_register_response(const json& response);
+    metricq::awaitable<void> on_source_config(const metricq::json& config) override;
+    metricq::awaitable<void> on_source_ready() override;
 
-private:
-    std::string data_exchange_;
-    std::unordered_map<std::string, Metric> metrics_;
+    asio::signal_set signals_;
+
+    metricq::Duration interval;
+    int chunks_sent_;
+    metricq::Timer timer_;
+    std::atomic<bool> stop_requested_ = false;
+    bool running_ = false;
+
+    std::string metric_;
+    int messages_per_chunk_;
+    int chunks_to_send_;
+
+    metricq::Timer::TimerResult timeout_cb(std::error_code);
 };
-} // namespace metricq

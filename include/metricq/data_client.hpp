@@ -52,7 +52,7 @@ public:
     ~DataClient();
 
 protected:
-    virtual void on_data_channel_ready();
+    virtual awaitable<void> on_data_channel_ready();
     void data_config(const json& config);
     void close() override;
 

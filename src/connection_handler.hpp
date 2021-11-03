@@ -28,6 +28,8 @@
 
 #pragma once
 
+#include <metricq/awaitable.hpp>
+
 #include <amqpcpp.h>
 
 #include <asio.hpp>
@@ -176,6 +178,8 @@ public:
 
 public:
     void connect(const AMQP::Address& address);
+    
+    metricq::awaitable<void> connect(const AMQP::Address& address, metricq::use_awaitable_t);
 
     bool close(std::function<void()> callback)
     {

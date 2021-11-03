@@ -74,7 +74,7 @@ void Connection::main_loop()
     io_service.run();
 }
 
-void Connection::connect(const std::string& server_address)
+asio::awaitable<void> Connection::connect(const std::string& server_address)
 {
     management_address_ = server_address;
 
@@ -90,40 +90,53 @@ void Connection::connect(const std::string& server_address)
         management_connection_ = std::make_unique<PlainConnectionHandler>(
             io_service, "Mgmt connection", connection_token_);
     }
-    management_connection_->set_error_callback(
-        [this](const auto& message) { this->on_error(message); });
+
+    management_connection_->set_error_callback([this](const auto& message)
+                                               { this->on_error(message); });
     management_connection_->set_close_callback([this]() { this->on_closed(); });
 
-    management_connection_->connect(*management_address_);
+    co_await management_connection_->connect(*management_address_, asio::use_awaitable);
+
     management_channel_ = management_connection_->make_channel();
     management_channel_->onReady(debug_success_cb("management channel ready"));
-    management_channel_->onError([](auto message) {
-        log::error("management channel error: {}", message);
-        throw std::runtime_error(message);
-    });
+    management_channel_->onError(
+        [](auto message)
+        {
+            log::error("management channel error: {}", message);
+            throw std::runtime_error(message);
+        });
 
     management_client_queue_ = connection_token_ + "-rpc";
 
     management_channel_->declareQueue(management_client_queue_, AMQP::exclusive)
-        .onSuccess([this](const std::string& name, [[maybe_unused]] int msgcount,
-                          [[maybe_unused]] int consumercount) {
-            management_channel_
-                ->bindQueue(management_broadcast_exchange_, management_client_queue_, "#")
-                .onError([name](auto message) {
-                    log::error("error binding management queue to broadcast exchange: {}", message);
-                    throw std::runtime_error(
-                        "Couldn't bind the management queue to the broadcast exchange");
-                })
-                .onSuccess([this, name]() {
-                    management_channel_->consume(name)
-                        .onReceived([this](const AMQP::Message& message, uint64_t delivery_tag,
-                                           bool redelivered) {
-                            handle_management_message(message, delivery_tag, redelivered);
+        .onSuccess(
+            [this](const std::string& name, [[maybe_unused]] int msgcount,
+                   [[maybe_unused]] int consumercount)
+            {
+                management_channel_
+                    ->bindQueue(management_broadcast_exchange_, management_client_queue_, "#")
+                    .onError(
+                        [name](auto message)
+                        {
+                            log::error("error binding management queue to broadcast exchange: {}",
+                                       message);
+                            throw std::runtime_error(
+                                "Couldn't bind the management queue to the broadcast exchange");
                         })
-                        .onSuccess([this]() { on_connected(); })
-                        .onError(debug_error_cb("management consume error"));
-                });
-        });
+                    .onSuccess(
+                        [this, name]()
+                        {
+                            management_channel_->consume(name)
+                                .onReceived(
+                                    [this](const AMQP::Message& message, uint64_t delivery_tag,
+                                           bool redelivered) {
+                                        handle_management_message(message, delivery_tag,
+                                                                  redelivered);
+                                    })
+                                .onSuccess([this]() { co_spawn(io_service, on_connected()); })
+                                .onError(debug_error_cb("management consume error"));
+                        });
+            });
 }
 
 void Connection::register_rpc_callback(const std::string& function, RPCCallback cb)
@@ -133,21 +146,6 @@ void Connection::register_rpc_callback(const std::string& function, RPCCallback 
     {
         log::error("trying to register RPC callback that is already registered: {}", function);
         throw std::invalid_argument("trying to register RPC callback that is already registered");
-    }
-}
-
-void Connection::register_rpc_response_callback(const std::string& correlation_id,
-                                                RPCResponseCallback callback, Duration timeout)
-{
-    auto ret = rpc_response_callbacks_.emplace(
-        std::piecewise_construct, std::make_tuple(correlation_id),
-        std::make_tuple(std::ref(io_service), std::move(callback), timeout));
-    if (!ret.second)
-    {
-        log::error("trying to register RPC response callback that is already registered: {}",
-                   correlation_id);
-        throw std::invalid_argument(
-            "trying to register RPC response callback that is already registered");
     }
 }
 
@@ -178,17 +176,22 @@ std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelope(const std::stri
     return envelope;
 }
 
-void Connection::rpc(const std::string& function, RPCResponseCallback callback, json payload,
-                     Duration timeout)
+awaitable<json> Connection::rpc(const std::string& function, json payload, Duration timeout)
 {
     log::debug("sending rpc: {}", function);
 
     auto message = prepare_message(function, std::move(payload));
     auto envelope = prepare_rpc_envelope(message);
 
-    register_rpc_response_callback(envelope->correlationID(), std::move(callback), timeout);
+    auto future = rpc_promises_[envelope->correlationID()].get_future();
 
     management_channel_->publish(management_exchange_, function, *envelope);
+
+    auto response = co_await wait_for(io_service, future, timeout);
+
+    rpc_promises_.erase(envelope->correlationID());
+
+    co_return response;
 }
 
 void Connection::handle_management_message(const AMQP::Message& incoming_message,
@@ -200,57 +203,24 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 
     auto content = json::parse(content_str);
 
-    auto acknowledge = finally([this, deliveryTag]() { management_channel_->ack(deliveryTag); });
+    //    auto acknowledge = finally([this, deliveryTag]() { management_channel_->ack(deliveryTag);
+    //    });
 
-    if (auto it = rpc_response_callbacks_.find(incoming_message.correlationID());
-        it != rpc_response_callbacks_.end())
+    if (auto it = rpc_promises_.find(incoming_message.correlationID()); it != rpc_promises_.end())
     {
-        // Incoming message is a RPC-response, call the response handler
+        // Incoming message is an RPC-response, set the future
         if (content.count("error"))
         {
-            log::error("rpc failed: {}. stopping", content["error"].get<std::string>());
-            acknowledge.invoke();
-            rpc_response_callbacks_.clear();
-            stop();
-            return;
+            log::error("rpc failed: {}.", content["error"].get<std::string>());
+            it->second.set_exception(std::make_exception_ptr(RPCError(content["error"])));
+        }
+        else
+        {
+            it->second.set_value(content);
         }
 
-        try
-        {
-            // This may be debatable... but right now we don't want to bother the caller
-            // with error handling. We may need it in the future.
-            it->second(content);
-        }
-        catch (json::parse_error& e)
-        {
-            log::error("error in rpc response handling {}: parsing message: {}\n{}",
-                       incoming_message.correlationID(), e.what(), content_str);
-            throw RPCError();
-        }
-        catch (json::type_error& e)
-        {
-            log::error("error in rpc response handling {}: accessing parameter: {}\n{}",
-                       incoming_message.correlationID(), e.what(), content_str);
-            throw RPCError();
-        }
-        catch (std::exception& e)
-        {
-            log::error("error in rpc response handling {}: {}\n{}",
-                       incoming_message.correlationID(), e.what(), content_str);
-            throw RPCError();
-        }
+        management_channel_->ack(deliveryTag);
 
-        // we must search again because the handler might have invalidated the iterator by starting
-        // another RPC using the rpc() method. That would insert a new entry into the
-        // rpc_response_callbacks_ map and, thus, potentially invalidating the iterator.
-        it = rpc_response_callbacks_.find(incoming_message.correlationID());
-        if (it == rpc_response_callbacks_.end())
-        {
-            log::error("error in rpc response handling {}: response callback vanished",
-                       incoming_message.correlationID());
-            throw RPCError();
-        }
-        rpc_response_callbacks_.erase(it);
         return;
     }
 
@@ -259,6 +229,9 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
         log::error("error in rpc: ignoring message that is neither a request nor an expected "
                    "response: {}\n{}",
                    incoming_message.correlationID(), content_str);
+
+        management_channel_->ack(deliveryTag);
+
         return;
     }
 
@@ -269,36 +242,43 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
         log::debug("management rpc call received: {}", truncate_string(content_str, 100));
         // incoming message is a RPC-call
 
-        try
-        {
-            auto response = it->second(content);
-            std::string reply_message = response.dump();
-            AMQP::Envelope envelope(reply_message.data(), reply_message.size());
-            envelope.setCorrelationID(incoming_message.correlationID());
-            envelope.setAppID(connection_token_);
-            envelope.setContentType("application/json");
+        co_spawn(io_service,
+                 [this, correlation_id = incoming_message.correlationID(),
+                  reply_to = incoming_message.replyTo(), content, content_str, function,
+                  callback = it->second]() -> awaitable<void>
+                 {
+                     try
+                     {
+                         auto response = co_await callback(content);
+                         std::string reply_message = response.dump();
+                         AMQP::Envelope envelope(reply_message.data(), reply_message.size());
+                         envelope.setCorrelationID(correlation_id);
+                         envelope.setAppID(connection_token_);
+                         envelope.setContentType("application/json");
 
-            log::debug("sending reply '{}' to {} / {}", reply_message, incoming_message.replyTo(),
-                       incoming_message.correlationID());
-            management_channel_->publish("", incoming_message.replyTo(), envelope);
-        }
-        catch (json::parse_error& e)
-        {
-            log::error("error in rpc handling {}: parsing message: {}\n{}", function, e.what(),
-                       content_str);
-            throw RPCError();
-        }
-        catch (json::type_error& e)
-        {
-            log::error("error in rpc handling {}: accessing parameter: {}\n{}", function, e.what(),
-                       content_str);
-            throw RPCError();
-        }
-        catch (std::exception& e)
-        {
-            log::error("error in rpc handling {}: {}\n{}", function, e.what(), content_str);
-            throw RPCError();
-        }
+                         log::debug("sending reply '{}' to {} / {}", reply_message, reply_to,
+                                    correlation_id);
+                         management_channel_->publish("", reply_to, envelope);
+                     }
+                     catch (json::parse_error& e)
+                     {
+                         log::error("error in rpc handling {}: parsing message: {}\n{}", function,
+                                    e.what(), content_str);
+                         throw RPCError();
+                     }
+                     catch (json::type_error& e)
+                     {
+                         log::error("error in rpc handling {}: accessing parameter: {}\n{}",
+                                    function, e.what(), content_str);
+                         throw RPCError();
+                     }
+                     catch (std::exception& e)
+                     {
+                         log::error("error in rpc handling {}: {}\n{}", function, e.what(),
+                                    content_str);
+                         throw RPCError();
+                     }
+                 }());
         return;
     }
 

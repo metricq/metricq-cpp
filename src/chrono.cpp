@@ -60,7 +60,7 @@ std::string Clock::format(metricq::Clock::time_point tp, std::string fmt)
 
     auto time = Clock::to_time_t(tp);
     std::tm tm_data;
-    localtime_r(&time, &tm_data);
+    tm_data = *localtime(&time);
 
     do
     {

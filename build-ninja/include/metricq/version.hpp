@@ -1,4 +1,4 @@
-// Copyright (c) 2018, ZIH,
+// Copyright (c) 2020, ZIH,
 // Technische Universitaet Dresden,
 // Federal Republic of Germany
 //
@@ -30,61 +30,14 @@
 
 #pragma once
 
-#include <metricq/awaitable.hpp>
-#include <metricq/chrono.hpp>
-#include <metricq/data_client.hpp>
-#include <metricq/datachunk.pb.h>
-#include <metricq/json_fwd.hpp>
-#include <metricq/metric.hpp>
-#include <metricq/types.hpp>
-
-#include <amqpcpp.h>
-
-#include <memory>
-#include <optional>
 #include <string>
-#include <unordered_map>
-
-namespace ev
-{
-class timer;
-}
 
 namespace metricq
 {
-
-class Source : public DataClient
+static const std::string& version()
 {
-public:
-    using Metric = metricq::Metric<Source>;
+    static std::string version_string = "metricq-cpp/1.0.0-42-gf145a95-dirty";
 
-    Source(const std::string& token);
-
-    void send(const std::string& id, TimeValue tv);
-    void send(const std::string& id, const DataChunk& dc);
-
-    Metric& operator[](const std::string& id)
-    {
-        auto ret = metrics_.try_emplace(id, id, *this);
-        return ret.first->second;
-    }
-
-protected:
-    awaitable<void> on_connected() override;
-    awaitable<void> on_data_channel_ready() override;
-
-protected:
-    virtual metricq::awaitable<void> on_source_config(const json& config) = 0;
-    virtual metricq::awaitable<void> on_source_ready() = 0;
-
-    awaitable<void> declare_metrics();
-    void clear_metrics();
-
-private:
-    awaitable<void> on_register_response(const json& response);
-
-private:
-    std::string data_exchange_;
-    std::unordered_map<std::string, Metric> metrics_;
-};
+    return version_string;
+}
 } // namespace metricq

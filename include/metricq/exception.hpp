@@ -46,12 +46,26 @@ public:
     using Exception::Exception;
 };
 
+class TimeoutError : public Exception
+{
+public:
+    using Exception::Exception;
+
+    TimeoutError() : Exception("Timeout error")
+    {
+    }
+};
+
 class RPCError : public Exception
 {
 public:
     using Exception::Exception;
 
     RPCError() : Exception("RPC error")
+    {
+    }
+
+    RPCError(const std::string& what) : Exception("RPC error: " + what)
     {
     }
 };

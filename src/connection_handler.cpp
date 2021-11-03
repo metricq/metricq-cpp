@@ -118,20 +118,64 @@ void AsioConnectionHandler::connect(const AMQP::Address& address)
 
 void AsioConnectionHandler::connect(asio::ip::tcp::resolver::iterator endpoint_iterator)
 {
-    asio::async_connect(this->underlying_socket(), endpoint_iterator,
-                        [this](const auto& error, auto successful_endpoint) {
-                            if (error)
-                            {
-                                log::error("[{}] Failed to connect to: {}", name_, error.message());
-                                this->onError("Connect failed");
-                                return;
-                            }
-                            log::debug("[{}] Established connection to {} at {}", name_,
-                                       successful_endpoint->host_name(),
-                                       successful_endpoint->endpoint());
+    //asio::async_connect(this->underlying_socket(), endpoint_iterator,
+    //                    [this](const auto& error, auto successful_endpoint) {
+    //                        if (error)
+    //                        {
+    //                            log::error("[{}] Failed to connect to: {}", name_, error.message());
+    //                            this->onError("Connect failed");
+    //                            return;
+    //                        }
+    //                        log::debug("[{}] Established connection to {} at {}", name_,
+    //                                   successful_endpoint.host_name(),
+    //                                   successful_endpoint.endpoint());
 
-                            this->handshake(successful_endpoint->host_name());
-                        });
+    //                        this->handshake(successful_endpoint->host_name());
+    //                    });
+}
+
+asio::awaitable<void> AsioConnectionHandler::connect(const AMQP::Address& address,
+                                                     asio::use_awaitable_t<>)
+{
+    assert(!underlying_socket().is_open());
+    assert(!connection_);
+
+    address_ = address;
+    connection_ = std::make_unique<AMQP::Connection>(this, address.login(), address.vhost());
+
+    asio::ip::tcp::resolver::query query(address.hostname(), std::to_string(address.port()));
+    auto endpoint_iterator = co_await resolver_.async_resolve(query, asio::use_awaitable);
+
+    // TODO what about error handling?
+    //    if (error)
+    //    {
+    //        log::error("[{}] failed to resolve hostname {}: {}", name_, address.hostname(),
+    //                   error.message());
+    //        this->onError("resolve failed");
+    //        return;
+    //    }
+
+    for (auto it = endpoint_iterator; it != decltype(endpoint_iterator)(); ++it)
+    {
+        log::debug("[{}] resolved {} to {}", name_, address.hostname(), it->endpoint());
+    }
+
+    auto successful_endpoint =
+        co_await asio::async_connect(this->underlying_socket(), endpoint_iterator,
+                                     decltype(endpoint_iterator)(), asio::use_awaitable);
+    // TODO error handling?
+    //                        [this](const auto& error, auto successful_endpoint) {
+    //                            if (error)
+    //                            {
+    //                                log::error("[{}] Failed to connect to: {}", name_,
+    //                                error.message()); this->onError("Connect failed"); return;
+    //                            }
+    //                        });
+
+    log::debug("[{}] Established connection to {} at {}", name_, successful_endpoint->host_name(),
+               successful_endpoint->endpoint());
+
+    this->handshake(successful_endpoint->host_name());
 }
 
 void PlainConnectionHandler::handshake(const std::string& hostname)

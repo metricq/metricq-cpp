@@ -52,16 +52,14 @@ Sink::~Sink()
 
 void Sink::subscribe(const std::vector<std::string>& metrics)
 {
-    rpc("sink.subscribe",
-        [this](const json& response) {
-            this->sink_config(response);
+    auto response = co_await rpc("sink.subscribe", { { "metrics", metrics }, { "metadata", true } });
 
-            if (this->data_queue() != response.at("dataQueue"))
-            {
-                throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
-            }
-        },
-        { { "metrics", metrics }, { "metadata", true } });
+    sink_config(response);
+
+    if (this->data_queue() != response.at("dataQueue"))
+    {
+        throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
+    }
 }
 
 void Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
@@ -71,18 +69,18 @@ void Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
         throw std::runtime_error("Expires must be >0");
     }
 
-    rpc("sink.subscribe",
-        [this](const json& response) {
-            this->sink_config(response);
-
-            if (this->data_queue() != response.at("dataQueue"))
-            {
-                throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
-            }
-        },
+    auto response = co_await rpc(
+        "sink.subscribe",
         { { "metrics", metrics },
           { "expires", std::chrono::duration_cast<std::chrono::duration<double>>(expires).count() },
           { "metadata", true } });
+
+    sink_config(response);
+
+    if (this->data_queue() != response.at("dataQueue"))
+    {
+        throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
+    }
 }
 
 void Sink::sink_config(const json& config)
@@ -123,15 +121,17 @@ void Sink::setup_data_consumer(const std::string& name, int message_count, int c
         log::warn("unexpected consumer count {} - are we not alone in the queue?", consumer_count);
     }
 
-    auto message_cb = [this](const AMQP::Message& message, uint64_t delivery_tag,
-                             bool redelivered) { on_data(message, delivery_tag, redelivered); };
+    auto message_cb = [this](const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
+    { on_data(message, delivery_tag, redelivered); };
 
     data_channel_->consume(name)
         .onReceived(message_cb)
-        .onSuccess([this]() {
-            this->is_data_queue_set_up_ = true;
-            log::debug("sink data queue consume success");
-        })
+        .onSuccess(
+            [this]()
+            {
+                this->is_data_queue_set_up_ = true;
+                log::debug("sink data queue consume success");
+            })
         .onError(debug_error_cb("sink data queue consume error"))
         .onFinalize([]() { log::info("sink data queue consume finalize"); });
 }

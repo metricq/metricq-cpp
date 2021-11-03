@@ -42,7 +42,9 @@ namespace metricq
 {
 DataClient::DataClient(const std::string& token, bool add_uuid) : Connection(token, add_uuid)
 {
-    register_rpc_callback("discover", std::bind(&DataClient::handle_discover_rpc, this, _1));
+    register_rpc_callback(
+        "discover",
+        [this](auto& request) -> awaitable<json> { co_return handle_discover_rpc(request); });
 }
 
 DataClient::~DataClient() = default;
@@ -85,10 +87,12 @@ void DataClient::open_data_connection()
 
     data_connection_->connect(*data_server_address_);
     data_channel_ = data_connection_->make_channel();
-    data_channel_->onReady([this]() {
-        log::debug("data_channel ready");
-        this->on_data_channel_ready();
-    });
+    data_channel_->onReady(
+        [this]()
+        {
+            log::debug("data_channel ready");
+            co_spawn(io_service, on_data_channel_ready());
+        });
     data_channel_->onError(debug_error_cb("data channel error"));
 }
 
@@ -104,14 +108,17 @@ void DataClient::close()
 
     // don't let the data_connection::close() call the on_closed() of this class, the close of the
     // management connection shall call on_closed().
-    data_connection_->close([this]() {
-        log::info("closed data_connection");
-        Connection::close();
-    });
+    data_connection_->close(
+        [this]()
+        {
+            log::info("closed data_connection");
+            Connection::close();
+        });
 }
 
-void DataClient::on_data_channel_ready()
+awaitable<void> DataClient::on_data_channel_ready()
 {
+    co_return;
 }
 
 } // namespace metricq

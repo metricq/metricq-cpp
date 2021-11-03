@@ -47,16 +47,20 @@ namespace metricq
 
 Source::Source(const std::string& token) : DataClient(token)
 {
-    register_rpc_callback("config", [this](const json& config) -> json {
-        on_source_config(config);
-        declare_metrics();
-        return json::object();
-    });
+    register_rpc_callback("config",
+                          [this](const json& config) -> awaitable<json>
+                          {
+                              co_await on_source_config(config);
+                              co_await declare_metrics();
+                              co_return json::object();
+                          });
 }
 
-void Source::on_connected()
+awaitable<void> Source::on_connected()
 {
-    rpc("source.register", [this](const auto& response) { on_register_response(response); });
+    auto response = co_await rpc("source.register");
+
+    co_await on_source_config(response);
 }
 
 void Source::send(const std::string& id, const DataChunk& dc)
@@ -70,29 +74,29 @@ void Source::send(const std::string& id, TimeValue tv)
     data_channel_->publish(data_exchange_, id, DataChunk(tv).SerializeAsString());
 }
 
-void Source::on_register_response(const json& response)
+awaitable<void> Source::on_register_response(const json& response)
 {
     data_config(response);
 
-    assert(this->data_exchange_.empty());
+    assert(data_exchange_.empty());
 
     // TODO: check if there's a better error to throw than what at() and get() throw in case any of
     // the required fields is missing.
-    this->data_exchange_ = response.at("dataExchange").get<std::string>();
-    this->on_source_config(response.at("config"));
+    data_exchange_ = response.at("dataExchange").get<std::string>();
+    co_await on_source_config(response.at("config"));
 }
 
-void Source::on_data_channel_ready()
+awaitable<void> Source::on_data_channel_ready()
 {
-    on_source_ready();
-    declare_metrics();
+    co_await on_source_ready();
+    co_await declare_metrics();
 }
 
-void Source::declare_metrics()
+awaitable<void> Source::declare_metrics()
 {
     if (metrics_.empty())
     {
-        return;
+        co_return;
     }
 
     json payload;
@@ -105,12 +109,8 @@ void Source::declare_metrics()
 
         payload["metrics"][metric.second.id()] = metric.second.metadata.json();
     }
-    rpc(
-        "source.declare_metrics",
-        [this](const auto&) { /* nothing to do */
-                              (void)this;
-        },
-        payload);
+
+    co_await rpc("source.declare_metrics", payload);
 }
 
 void Source::clear_metrics()

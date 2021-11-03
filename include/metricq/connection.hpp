@@ -29,6 +29,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
+#include <metricq/awaitable.hpp>
 #include <metricq/json.hpp>
 #include <metricq/timer.hpp>
 
@@ -37,6 +38,7 @@
 #include <amqpcpp.h>
 
 #include <functional>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
@@ -47,57 +49,22 @@ namespace metricq
 
 class AsioConnectionHandler;
 
-class RPCResponseGuard
-{
-public:
-    using Callback = std::function<void(const json& response)>;
-
-    RPCResponseGuard(asio::io_service& io_service, Callback callback,
-                     Duration timeout = std::chrono::seconds(60))
-    : timer_(io_service, std::bind(&RPCResponseGuard::on_timeout, this, std::placeholders::_1)),
-      callback_(std::move(callback))
-    {
-        timer_.start(timeout);
-    }
-
-    ~RPCResponseGuard()
-    {
-        timer_.cancel();
-    }
-
-    Timer::TimerResult on_timeout(std::error_code)
-    {
-        throw std::runtime_error("Timeout during RPC");
-    }
-
-    void operator()(const json& response)
-    {
-        timer_.cancel();
-        callback_(response);
-    }
-
-private:
-    metricq::Timer timer_;
-    Callback callback_;
-};
-
 class Connection
 {
 public:
     void main_loop();
 
 protected:
-    using RPCCallback = std::function<json(const json& response)>;
-    using RPCResponseCallback = RPCResponseGuard::Callback;
+    using RPCCallback = std::function<awaitable<json>(const json& response)>;
 
     explicit Connection(const std::string& connection_token, bool add_uuid = false,
                         std::size_t concurrency_hint = 1);
     virtual ~Connection() = 0;
 
 public:
-    void connect(const std::string& server_address);
+    [[nodiscard]] awaitable<void> connect(const std::string& server_address);
 
-    const std::string token() const
+    const std::string& token() const
     {
         return connection_token_;
     }
@@ -112,13 +79,13 @@ protected:
     {
     }
 
-    virtual void on_connected() = 0;
+    virtual awaitable<void> on_connected() = 0;
 
-    void rpc(const std::string& function, RPCResponseCallback callback, json payload = json({}),
+    awaitable<json> rpc(const std::string& function, json payload = json({}),
              Duration timeout = std::chrono::seconds(60));
     void register_rpc_callback(const std::string& function, RPCCallback callback);
-    void register_rpc_response_callback(const std::string& correlation_id,
-                                        RPCResponseCallback callback, Duration timeout);
+//    void register_rpc_response_callback(const std::string& correlation_id,
+//                                        RPCResponseCallback callback, Duration timeout);
 
     std::string prepare_message(const std::string& function, json payload);
     std::unique_ptr<AMQP::Envelope> prepare_rpc_envelope(const std::string& message);
@@ -134,8 +101,9 @@ protected:
 private:
     void handle_management_message(const AMQP::Message& incoming_message, uint64_t deliveryTag,
                                    bool redelivered);
+    awaitable<void> handle_rpc_message(const AMQP::Message& incoming_message, uint64_t deliveryTag);
 
-protected:
+public:
     asio::io_service io_service;
 
 private:
@@ -146,7 +114,7 @@ private:
     std::unique_ptr<AsioConnectionHandler> management_connection_;
     std::unique_ptr<AMQP::Channel> management_channel_;
     std::unordered_map<std::string, RPCCallback> rpc_callbacks_;
-    std::unordered_map<std::string, RPCResponseGuard> rpc_response_callbacks_;
+    std::unordered_map<std::string, std::promise<json>> rpc_promises_;
     std::string management_client_queue_;
     std::string management_queue_ = "management";
     std::string management_exchange_ = "metricq.management";
