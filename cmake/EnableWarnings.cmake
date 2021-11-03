@@ -1,0 +1,7 @@
+function(target_compile_warnings target scope)
+    if(MSVC)
+        target_compile_options(${target} ${scope} $<$<CONFIG:Debug>:/W4>)
+    else()
+        target_compile_options(${target} ${scope} $<$<CONFIG:Debug>:-Wall -pedantic -Wextra>)
+    endif()
+endfunction()

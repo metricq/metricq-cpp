@@ -73,6 +73,7 @@ target_link_libraries(amqpcpp
     PUBLIC
         OpenSSL::SSL
 )
+target_compile_definitions(amqpcpp PUBLIC NOMINMAX)
 target_compile_features(amqpcpp PUBLIC cxx_std_14)
 set_target_properties(amqpcpp PROPERTIES
     POSITION_INDEPENDENT_CODE ${METRICQ_POSITION_INDEPENDENT_CODE}
@@ -110,7 +111,13 @@ target_include_directories(asio SYSTEM
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/asio/asio/include>
         $<INSTALL_INTERFACE:include>
 )
-target_compile_definitions(asio INTERFACE ASIO_STANDALONE) # ASIO_ENABLE_HANDLER_TRACKING)
+target_compile_definitions(asio
+    INTERFACE
+        ASIO_STANDALONE
+        ASIO_HAS_STD_COROUTINE
+        ASIO_HAS_CO_AWAIT
+        # ASIO_ENABLE_HANDLER_TRACKING
+)
 
 add_library(asio::asio ALIAS asio)
 

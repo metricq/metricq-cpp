@@ -121,7 +121,7 @@ metricq::Timer::TimerResult DummySource::timeout_cb(std::error_code)
     for (int i = 0; i < messages_per_chunk_; i++)
     {
         double value = sin(
-            2 * M_PI * (chunks_sent_ + static_cast<double>(i) / messages_per_chunk_) / interval_ms);
+            2 * 3.1415 * (chunks_sent_ + static_cast<double>(i) / messages_per_chunk_) / interval_ms);
         metric.send({ current_time, value });
         current_time += interval / (messages_per_chunk_ + 1);
     }

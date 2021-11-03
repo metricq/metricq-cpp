@@ -16,7 +16,7 @@ target_include_directories(metricq-summary
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 target_compile_features(metricq-summary PRIVATE cxx_std_17)
-target_compile_options(metricq-summary PRIVATE -Wall -Wextra -pedantic)
+target_compile_warnings(metricq-summary PRIVATE)
 
 target_link_libraries(metricq-summary
     PUBLIC

@@ -4,6 +4,7 @@ project(metricq VERSION 1.0.0)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH}")
 
+include(cmake/EnableWarnings.cmake)
 include(cmake/DefaultBuildType.cmake)
 include(cmake/GitSubmoduleUpdate.cmake)
 git_submodule_update()
@@ -26,8 +27,6 @@ add_custom_command(
     OUTPUT
         ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/history.pb.h
         ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/datachunk.pb.h
-        ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
-        ${CMAKE_CURRENT_BINARY_DIR}/include
     DEPENDS ${PROTO_FILES} ${PROTO_HEADER}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
     COMMAND ${CMAKE_COMMAND} -E copy ${PROTO_HEADER} ${CMAKE_CURRENT_BINARY_DIR}/include/metricq
@@ -39,7 +38,7 @@ add_custom_target(metricq-protobuf-move-headers ALL
         ${CMAKE_CURRENT_BINARY_DIR}/include/metricq/datachunk.pb.h
 )
 
-# generate version string used in lo2s
+# generate version string used in MetricQ
 if(Git_FOUND)
     _is_git(${CMAKE_CURRENT_SOURCE_DIR} IN_GIT)
 endif()
@@ -103,7 +102,9 @@ set_target_properties(metricq-core PROPERTIES
     POSITION_INDEPENDENT_CODE ${METRICQ_POSITION_INDEPENDENT_CODE}
 )
 
-target_compile_features(metricq-core PUBLIC cxx_std_17)
+target_compile_features(metricq-core PUBLIC cxx_std_20)
+target_compile_options(metricq-core PUBLIC -fcoroutines)
+target_compile_definitions(metricq-core PUBLIC NOMINMAX)
 
 add_library(metricq-source ${SOURCE_SRCS})
 target_link_libraries(metricq-source
@@ -182,11 +183,7 @@ add_library(metricq::db ALIAS metricq-db)
 add_library(metricq::history ALIAS metricq-history)
 add_library(metricq::protobuf ALIAS metricq-protobuf)
 
-
-target_compile_options(metricq-core
-    PRIVATE
-        -Wall -Wextra -pedantic -Wsign-compare
-)
+target_compile_warnings(metricq-core PRIVATE)
 
 if(NOT TARGET Nitro::log)
     add_subdirectory(lib/nitro)
@@ -206,11 +203,13 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     include(GNUInstallDirs)
 
     add_subdirectory(examples)
-    add_subdirectory(tools/metricq-summary)
+    if(NOT MSVC)
+        add_subdirectory(tools/metricq-summary)
+    endif()
 
     target_compile_options(metricq-core
         PUBLIC
-            -Wall -Wextra -pedantic -Wsign-compare -Werror
+            $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wsign-compare>
     )
 
     install(DIRECTORY

@@ -121,7 +121,7 @@ metricq::Timer::TimerResult StressTestSource::timeout_cb(std::error_code)
     metric.chunk_size(0);
     for (int i = 0; i < r; i++)
     {
-        double value = 2 * M_PI * (t + (double)i / r) / interval_ms;
+        double value = 2 * 3.1415 * (t + (double)i / r) / interval_ms;
         metric.send({ current_time_, value });
         current_time_ +=
             std::chrono::duration_cast<metricq::Duration>(std::chrono::milliseconds(interval_ms)) /
