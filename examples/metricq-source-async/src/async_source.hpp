@@ -35,13 +35,12 @@
 #include <atomic>
 #include <system_error>
 
-class DummySource : public metricq::Source
+class AsyncSource : public metricq::Source
 {
 public:
-    DummySource(const std::string& manager_host, const std::string& token,
-                metricq::Duration interval, const std::string& metric, int messages_per_chunk,
-                int chunks_to_send);
-    ~DummySource();
+    AsyncSource(const std::string& token, metricq::Duration interval, const std::string& metric,
+                int messages_per_chunk);
+    ~AsyncSource();
 
     void on_error(const std::string& message) override;
     void on_closed() override;
@@ -50,17 +49,13 @@ private:
     metricq::awaitable<void> on_source_config(const metricq::json& config) override;
     metricq::awaitable<void> on_source_ready() override;
 
+    metricq::awaitable<void> task();
+
     asio::signal_set signals_;
 
     metricq::Duration interval;
-    int chunks_sent_;
-    metricq::Timer timer_;
     std::atomic<bool> stop_requested_ = false;
-    bool running_ = false;
 
     std::string metric_;
     int messages_per_chunk_;
-    int chunks_to_send_;
-
-    metricq::Timer::TimerResult timeout_cb(std::error_code);
 };

@@ -25,7 +25,7 @@
 // LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#include "dummy_source.hpp"
+#include "async_source.hpp"
 
 #include <metricq/logger/nitro.hpp>
 
@@ -37,14 +37,12 @@
 
 using Log = metricq::logger::nitro::Log;
 
-DummySource::DummySource(const std::string& manager_host, const std::string& token,
-                         metricq::Duration interval, const std::string& metric,
-                         int messages_per_chunk, int chunks_to_send)
+AsyncSource::AsyncSource(const std::string& token, metricq::Duration interval,
+                         const std::string& metric, int messages_per_chunk)
 : metricq::Source(token), signals_(io_service, SIGINT, SIGTERM), interval(interval),
-  chunks_sent_(0), timer_(io_service), metric_(metric), messages_per_chunk_(messages_per_chunk),
-  chunks_to_send_(chunks_to_send)
+  metric_(metric), messages_per_chunk_(messages_per_chunk)
 {
-    Log::debug() << "DummySource::DummySource() called";
+    Log::debug() << "AsyncSource::AsyncSource() called";
 
     // Register signal handlers so that the daemon may be shut down.
     signals_.async_wait([this](auto, auto signal) {
@@ -53,90 +51,68 @@ DummySource::DummySource(const std::string& manager_host, const std::string& tok
             return;
         }
         Log::info() << "Caught signal " << signal << ". Shutdown.";
-        if (timer_.running())
-        {
-            stop_requested_ = true;
-        }
-        else
-        {
-            Log::info() << "closing source";
-            stop();
-        }
+
+        stop_requested_ = true;
     });
-
-    (void)manager_host;
-
-    // connect(manager_host);
 }
 
-DummySource::~DummySource()
+AsyncSource::~AsyncSource()
 {
 }
 
-metricq::awaitable<void> DummySource::on_source_config(const metricq::json&)
+metricq::awaitable<void> AsyncSource::on_source_config(const metricq::json&)
 {
-    Log::debug() << "DummySource::on_source_config() called";
+    Log::debug() << "AsyncSource::on_source_config() called";
     (*this)[metric_];
 
     co_return;
 }
 
-metricq::awaitable<void> DummySource::on_source_ready()
+metricq::awaitable<void> AsyncSource::on_source_ready()
 {
-    Log::debug() << "DummySource::on_source_ready() called";
+    Log::debug() << "AsyncSource::on_source_ready() called";
     (*this)[metric_].metadata.unit("kittens");
     (*this)[metric_].metadata.rate(messages_per_chunk_ / (interval.count() * 1e-9));
     (*this)[metric_].metadata["color"] = "pink";
     (*this)[metric_].metadata["paws"] = 4;
 
-    timer_.start([this](auto err) { return this->timeout_cb(err); }, interval);
-
-    running_ = true;
+    metricq::co_spawn(io_service, task(), *this);
 
     co_return;
 }
 
-void DummySource::on_error(const std::string& message)
+void AsyncSource::on_error(const std::string& message)
 {
-    Log::debug() << "DummySource::on_error() called";
+    Log::debug() << "AsyncSource::on_error() called";
     Log::error() << "Shit hits the fan: " << message;
     signals_.cancel();
-    timer_.cancel();
 }
 
-void DummySource::on_closed()
+void AsyncSource::on_closed()
 {
-    Log::debug() << "DummySource::on_closed() called";
+    Log::debug() << "AsyncSource::on_closed() called";
     signals_.cancel();
-    timer_.cancel();
 }
 
-metricq::Timer::TimerResult DummySource::timeout_cb(std::error_code)
+metricq::awaitable<void> AsyncSource::task()
 {
-    if (stop_requested_)
-    {
-        Log::info() << "closing source and stopping metric timer";
-        stop();
-        return metricq::Timer::TimerResult::cancel;
-    }
-    Log::debug() << "sending metrics...";
-    auto current_time = metricq::Clock::now();
     auto& metric = (*this)[metric_];
-    auto interval_ms = std::chrono::duration_cast<std::chrono::milliseconds>(interval).count();
-    metric.chunk_size(0);
-    for (int i = 0; i < messages_per_chunk_; i++)
+
+    Log::info() << "dummy async source task started...";
+
+    int sends_till_throw = 4;
+
+    while (!stop_requested_)
     {
-        double value = sin(
-            2 * 3.1415 * (chunks_sent_ + static_cast<double>(i) / messages_per_chunk_) / interval_ms);
-        metric.send({ current_time, value });
-        current_time += interval / (messages_per_chunk_ + 1);
+        if (!sends_till_throw--)
+            throw std::runtime_error("Hello there!");
+
+        co_await metricq::wait_for(io_service, interval);
+        Log::debug() << "sending metrics...";
+        auto current_time = metricq::Clock::now();
+        metric.send({ current_time, 42 });
+        metric.flush();
     }
-    metric.flush();
-    chunks_sent_++;
-    if (chunks_to_send_ && chunks_sent_ >= chunks_to_send_)
-    {
-        stop();
-        return metricq::Timer::TimerResult::cancel;
-    }
-    return metricq::Timer::TimerResult::repeat;
+
+    close();
 }

@@ -25,7 +25,7 @@
 // LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#include "dummy_source.hpp"
+#include "async_source.hpp"
 
 #include <metricq/awaitable.hpp>
 #include <metricq/logger/nitro.hpp>
@@ -94,9 +94,8 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        DummySource source(options.get("server"), options.get("token"), interval,
-                           options.get("metric"), options.as<int>("messages-per-chunk"),
-                           options.as<int>("chunk-count"));
+        AsyncSource source(options.get("token"), interval, options.get("metric"),
+                           options.as<int>("messages-per-chunk"));
         metricq::co_spawn(source.io_service, source.connect(options.get("server")));
 
         Log::info() << "starting main loop.";

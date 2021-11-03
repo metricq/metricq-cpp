@@ -177,9 +177,9 @@ public:
                               AMQP::Table& client) override;
 
 public:
-    void connect(const AMQP::Address& address);
-    
-    metricq::awaitable<void> connect(const AMQP::Address& address, metricq::use_awaitable_t);
+    // void connect(const AMQP::Address& address);
+
+    awaitable<void> connect(const AMQP::Address& address);
 
     bool close(std::function<void()> callback)
     {

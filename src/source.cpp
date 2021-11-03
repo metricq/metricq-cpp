@@ -47,20 +47,17 @@ namespace metricq
 
 Source::Source(const std::string& token) : DataClient(token)
 {
-    register_rpc_callback("config",
-                          [this](const json& config) -> awaitable<json>
-                          {
-                              co_await on_source_config(config);
-                              co_await declare_metrics();
-                              co_return json::object();
-                          });
+    register_rpc_callback("config", [this](const json& config) -> awaitable<json> {
+        co_await on_source_config(config);
+        co_await declare_metrics();
+        co_return json::object();
+    });
 }
 
 awaitable<void> Source::on_connected()
 {
     auto response = co_await rpc("source.register");
-
-    co_await on_source_config(response);
+    co_await on_register_response(response);
 }
 
 void Source::send(const std::string& id, const DataChunk& dc)
@@ -76,7 +73,7 @@ void Source::send(const std::string& id, TimeValue tv)
 
 awaitable<void> Source::on_register_response(const json& response)
 {
-    data_config(response);
+    co_await data_config(response);
 
     assert(data_exchange_.empty());
 

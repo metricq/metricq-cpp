@@ -42,14 +42,14 @@ namespace metricq
 {
 DataClient::DataClient(const std::string& token, bool add_uuid) : Connection(token, add_uuid)
 {
-    register_rpc_callback(
-        "discover",
-        [this](auto& request) -> awaitable<json> { co_return handle_discover_rpc(request); });
+    register_rpc_callback("discover", [this](auto& request) -> awaitable<json> {
+        co_return handle_discover_rpc(request);
+    });
 }
 
 DataClient::~DataClient() = default;
 
-void DataClient::data_config(const metricq::json& config)
+awaitable<void> DataClient::data_config(const metricq::json& config)
 {
     AMQP::Address new_data_server_address =
         derive_address(config["dataServerAddress"].get<std::string>());
@@ -63,15 +63,15 @@ void DataClient::data_config(const metricq::json& config)
             std::abort();
         }
         // We should be fine, connection and channel is already setup and the same
-        return;
+        co_return;
     }
 
     data_server_address_ = new_data_server_address;
 
-    open_data_connection();
+    co_await open_data_connection();
 }
 
-void DataClient::open_data_connection()
+awaitable<void> DataClient::open_data_connection()
 {
     log::debug("opening data connection to {}", redact_address_login(*data_server_address_));
     if (data_server_address_->secure())
@@ -85,14 +85,13 @@ void DataClient::open_data_connection()
             std::make_unique<PlainConnectionHandler>(io_service, "Data connection", token());
     }
 
-    data_connection_->connect(*data_server_address_);
+    co_await data_connection_->connect(*data_server_address_);
+
     data_channel_ = data_connection_->make_channel();
-    data_channel_->onReady(
-        [this]()
-        {
-            log::debug("data_channel ready");
-            co_spawn(io_service, on_data_channel_ready());
-        });
+    data_channel_->onReady([this]() {
+        log::debug("data_channel ready");
+        metricq::co_spawn(io_service, on_data_channel_ready(), *this);
+    });
     data_channel_->onError(debug_error_cb("data channel error"));
 }
 
@@ -108,12 +107,10 @@ void DataClient::close()
 
     // don't let the data_connection::close() call the on_closed() of this class, the close of the
     // management connection shall call on_closed().
-    data_connection_->close(
-        [this]()
-        {
-            log::info("closed data_connection");
-            Connection::close();
-        });
+    data_connection_->close([this]() {
+        log::info("closed data_connection");
+        Connection::close();
+    });
 }
 
 awaitable<void> DataClient::on_data_channel_ready()

@@ -59,155 +59,70 @@ inline void co_spawn(Executor& e, awaitable<T> a)
     asio::co_spawn(e, std::move(a), asio::detached);
 }
 
-template <typename Executor, typename T, typename CompletionToken>
-inline auto co_spawn(Executor& e, awaitable<T> a, CompletionToken&& token)
+template <typename Executor, typename T, typename Connection>
+inline void co_spawn(Executor& e, awaitable<T> a, Connection& connection)
 {
-    return asio::co_spawn(e, std::move(a), std::move(token));
-}
-
-template <typename T>
-class FutureAwaiter : public asio::detail::awaitable_thread<T>
-{
-public:
-    FutureAwaiter(asio::io_context& ctx, std::future<T>& fut) : ctx_(ctx), timer_(ctx), fut_(fut)
-    {
-    }
-    //
-    //    FutureAwaiter(std::future<T>& fut, TimePoint wait_until)
-    //    : fut_(fut), has_deadline_(true), deadline_(wait_until)
-    //    {
-    //    }
-    //
-    //    FutureAwaiter(std::future<T>& fut, Duration wait_for)
-    //    : fut_(fut), has_deadline_(true), deadline_(Clock::now() + wait_for)
-    //    {
-    //    }
-
-    bool await_ready()
-    {
-        return fut_.wait_for(Duration(0)) == std::future_status::ready;
-    }
-
-    bool await_suspend(std::coroutine_handle<> ch)
-    {
-        auto status = fut_.wait_for(Duration(0));
-        if (status == std::future_status::ready)
+    asio::co_spawn(e, std::move(a), [&connection](std::exception_ptr eptr) {
+        try
         {
-            return false;
-        }
-
-        // HACK
-        // asio::defer(ctx_,
-        //            [ch, this](auto error)
-        //            {
-        //                std::this_thread::sleep_for(std::chrono::seconds(10));
-
-        //                auto status = fut_.wait_for(Duration(0));
-        //                if (status == std::future_status::ready)
-        //                {
-        //                    ch.resume();
-        //                }
-        //            });
-
-        timer_.expires_from_now(std::chrono::seconds(1));
-        timer_.async_wait(
-            [this, ch]()
+            if (eptr)
             {
-                assert(fut_.wait_for(Duration(0)) == std::future_status::ready);
-                ch.resume();
-            });
+                std::rethrow_exception(eptr);
+            }
+        }
+        catch (const std::exception& e)
+        {
+            connection.on_unhandled_exception(e);
+        }
+    });
+}
 
-        return true;
-    }
-
-    auto await_resume()
-    {
-        return fut_.get();
-    }
-
-private:
-    asio::io_context& ctx_;
-    asio::system_timer timer_;
-    std::future<T>& fut_;
-    bool has_deadline_ = false;
-    TimePoint deadline_;
-};
-
-// template <typename T>
-// auto async_await(asio::system_timer& t, std::future<T>& fut, Duration d)
-//{
-//    struct Awaiter
-//    {
-//        asio::system_timer& t;
-//        Duration d;
-//        TimePoint start;
-//        std::error_code ec;
-//
-//        bool await_ready()
-//        {
-//            return fut_.wait_for(Duration(0)) == std::future_status::ready;
-//        }
-//
-//        auto await_resume()
-//        {
-//            if (ec)
-//                throw std::system_error(ec);
-//
-//        }
-//        void await_suspend(std::experimental::coroutine_handle<> coro)
-//        {
-//            start = Clock::now();
-//            t.expires_from_now(std::chrono::milliseconds(10));
-//            t.async_wait([this, coro](auto ec) {
-//
-//                });
-//        }
-//
-//        void time_callback(std::experimental::coroutine_handle<> coro, std::error_code ec)
-//        {
-//
-//            t.async_wait(
-//                [this, coro](auto ec)
-//                {
-//                    this->ec = ec;
-//                    coro.resume();
-//                });
-//        }
-//    };
-//    return Awaiter{ t, d };
-//}
-
-template <typename T>
-FutureAwaiter<T> await_future(asio::io_context& ctx, std::future<T>& fut)
+[[nodiscard]] inline awaitable<void> wait_for(asio::io_context& ctx, Duration timeout)
 {
-    return FutureAwaiter<T>(ctx, fut);
+    asio::system_timer timer(ctx);
+    timer.expires_from_now(timeout);
+    co_await timer.async_wait(asio::use_awaitable);
 }
 
 template <typename T>
-awaitable<T> wait_for(asio::io_context& ctx, std::future<T>& fut, Duration timeout)
+[[nodiscard]] awaitable<T> wait_for(asio::io_context& ctx, std::future<T>& fut, Duration timeout)
 {
-    asio::system_timer test_timer(ctx);
+    // At the moment of writing, asio doesn't provide it's own future/promise types (or other
+    // coroutine primitives for that matter). Hence, we have to do it on our own.
 
-    //(void)timeout;
-    // co_return co_await await_future(ctx, fut);
+    // TODO: Make this implementation efficient. This will probably require you to understand
+    // ASIO implementation code, or wait for ASIO to support `co_await fut`
+
+    // Right now, this asynchronously polls using the asio timer. Hence, we don't leave
+    // the sacred asio lands.
+
+    // I tried to define my own coroutine, which would handle the awaiting of the future, but
+    // that went nowhere. The missing puzzle piece is how to "convert" a custom coroutine to
+    // something asio understands.
 
     auto now = Clock::now();
 
     auto status = fut.wait_for(Duration(0));
 
-    while (status != std::future_status::ready || Clock::now() - now > timeout)
+    while (status != std::future_status::ready && Clock::now() - now < timeout)
     {
-        test_timer.expires_from_now(std::chrono::milliseconds(100));
-        co_await test_timer.async_wait(asio::use_awaitable);
+        // this line is the important thing here! Using the asio::system_timer
+        // creates an interruption point here that allows the executor to
+        // progress other stuff, in particular, it progresses running network
+        // operations, which might soon finish the future.
+        co_await wait_for(ctx, std::chrono::milliseconds(10));
         status = fut.wait_for(Duration(0));
     }
 
     if (status == std::future_status::ready)
     {
+        // The future is ready, so either it succedded, or an exception was set.
         co_return fut.get();
     }
     else
     {
+        // Either we hit the timeout as defined with the parameter, or the future itself
+        // ran into a timeout. Whatever that means
         throw TimeoutError("future timed out");
     }
 }

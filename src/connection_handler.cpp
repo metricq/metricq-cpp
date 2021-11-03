@@ -89,53 +89,7 @@ SSLConnectionHandler::SSLConnectionHandler(asio::io_service& io_service, const s
                              asio::ssl::context::tlsv12_client);
 }
 
-void AsioConnectionHandler::connect(const AMQP::Address& address)
-{
-    assert(!underlying_socket().is_open());
-    assert(!connection_);
-
-    address_ = address;
-    connection_ = std::make_unique<AMQP::Connection>(this, address.login(), address.vhost());
-
-    asio::ip::tcp::resolver::query query(address.hostname(), std::to_string(address.port()));
-    resolver_.async_resolve(query, [this, address](const auto& error, auto endpoint_iterator) {
-        if (error)
-        {
-            log::error("[{}] failed to resolve hostname {}: {}", name_, address.hostname(),
-                       error.message());
-            this->onError("resolve failed");
-            return;
-        }
-
-        for (auto it = endpoint_iterator; it != decltype(endpoint_iterator)(); ++it)
-        {
-            log::debug("[{}] resolved {} to {}", name_, address.hostname(), it->endpoint());
-        }
-
-        this->connect(endpoint_iterator);
-    });
-}
-
-void AsioConnectionHandler::connect(asio::ip::tcp::resolver::iterator endpoint_iterator)
-{
-    //asio::async_connect(this->underlying_socket(), endpoint_iterator,
-    //                    [this](const auto& error, auto successful_endpoint) {
-    //                        if (error)
-    //                        {
-    //                            log::error("[{}] Failed to connect to: {}", name_, error.message());
-    //                            this->onError("Connect failed");
-    //                            return;
-    //                        }
-    //                        log::debug("[{}] Established connection to {} at {}", name_,
-    //                                   successful_endpoint.host_name(),
-    //                                   successful_endpoint.endpoint());
-
-    //                        this->handshake(successful_endpoint->host_name());
-    //                    });
-}
-
-asio::awaitable<void> AsioConnectionHandler::connect(const AMQP::Address& address,
-                                                     asio::use_awaitable_t<>)
+awaitable<void> AsioConnectionHandler::connect(const AMQP::Address& address)
 {
     assert(!underlying_socket().is_open());
     assert(!connection_);

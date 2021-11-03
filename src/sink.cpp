@@ -52,7 +52,8 @@ Sink::~Sink()
 
 void Sink::subscribe(const std::vector<std::string>& metrics)
 {
-    auto response = co_await rpc("sink.subscribe", { { "metrics", metrics }, { "metadata", true } });
+    auto response =
+        co_await rpc("sink.subscribe", { { "metrics", metrics }, { "metadata", true } });
 
     sink_config(response);
 
@@ -69,17 +70,28 @@ void Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
         throw std::runtime_error("Expires must be >0");
     }
 
-    auto response = co_await rpc(
-        "sink.subscribe",
-        { { "metrics", metrics },
-          { "expires", std::chrono::duration_cast<std::chrono::duration<double>>(expires).count() },
-          { "metadata", true } });
-
-    sink_config(response);
-
-    if (this->data_queue() != response.at("dataQueue"))
+    try
     {
-        throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
+
+        auto response = co_await rpc(
+            "sink.subscribe",
+            { { "metrics", metrics },
+              { "expires",
+                std::chrono::duration_cast<std::chrono::duration<double>>(expires).count() },
+              { "metadata", true } });
+
+        sink_config(response);
+
+        if (this->data_queue() != response.at("dataQueue"))
+        {
+            throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
+        }
+    }
+    catch (std::exception& e)
+    {
+        log::error("rpc throws: {}", e.what());
+
+        throw;
     }
 }
 

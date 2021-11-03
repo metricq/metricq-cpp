@@ -53,11 +53,11 @@ public:
 
 protected:
     virtual awaitable<void> on_data_channel_ready();
-    void data_config(const json& config);
+    awaitable<void> data_config(const json& config);
     void close() override;
 
 private:
-    void open_data_connection();
+    awaitable<void> open_data_connection();
 
     std::optional<AMQP::Address> data_server_address_;
     std::unique_ptr<AsioConnectionHandler> data_connection_;

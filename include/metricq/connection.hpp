@@ -69,6 +69,9 @@ public:
         return connection_token_;
     }
 
+public:
+    virtual void on_unhandled_exception(const std::exception& e);
+
 protected:
     virtual void on_error(const std::string& message)
     {
@@ -82,10 +85,8 @@ protected:
     virtual awaitable<void> on_connected() = 0;
 
     awaitable<json> rpc(const std::string& function, json payload = json({}),
-             Duration timeout = std::chrono::seconds(60));
+                        Duration timeout = std::chrono::seconds(60));
     void register_rpc_callback(const std::string& function, RPCCallback callback);
-//    void register_rpc_response_callback(const std::string& correlation_id,
-//                                        RPCResponseCallback callback, Duration timeout);
 
     std::string prepare_message(const std::string& function, json payload);
     std::unique_ptr<AMQP::Envelope> prepare_rpc_envelope(const std::string& message);
