@@ -70,8 +70,8 @@ private:
 protected:
     void setup_history_queue();
     void setup_history_consumer(const std::string& name, int message_count, int consumer_count);
-    void config(const json& config);
-    void on_connected() override;
+    awaitable<void> config(const json& config);
+    awaitable<void> on_connected() override;
 
 protected:
     std::string history_exchange_;
@@ -81,8 +81,8 @@ protected:
     HistoryResponse history_response_;
 
 protected:
-    virtual void on_history_channel_ready();
-    void history_config(const json& config);
+    virtual awaitable<void> on_history_channel_ready();
+    awaitable<void> history_config(const json& config);
     void close() override;
 
 private:

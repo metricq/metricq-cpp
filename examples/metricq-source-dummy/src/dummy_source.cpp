@@ -26,7 +26,6 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "dummy_source.hpp"
-#include "../../metricq-source-async/src/dummy_source.hpp"
 
 #include <metricq/logger/nitro.hpp>
 
@@ -65,20 +64,22 @@ DummySource::DummySource(const std::string& manager_host, const std::string& tok
         }
     });
 
-    connect(manager_host);
+    metricq::co_spawn(io_service, connect(manager_host));
 }
 
 DummySource::~DummySource()
 {
 }
 
-void DummySource::on_source_config(const metricq::json&)
+metricq::awaitable<void> DummySource::on_source_config(const metricq::json&)
 {
     Log::debug() << "DummySource::on_source_config() called";
     (*this)[metric_];
+
+    co_return;
 }
 
-void DummySource::on_source_ready()
+metricq::awaitable<void> DummySource::on_source_ready()
 {
     Log::debug() << "DummySource::on_source_ready() called";
     (*this)[metric_].metadata.unit("kittens");
@@ -86,7 +87,7 @@ void DummySource::on_source_ready()
     (*this)[metric_].metadata["color"] = "pink";
     (*this)[metric_].metadata["paws"] = 4;
 
-//    timer_.start([this](auto err) { return this->timeout_cb(err); }, interval);
+    timer_.start([this](auto err) { return this->timeout_cb(err); }, interval);
 
     running_ = true;
 }
@@ -96,57 +97,43 @@ void DummySource::on_error(const std::string& message)
     Log::debug() << "DummySource::on_error() called";
     Log::error() << "Shit hits the fan: " << message;
     signals_.cancel();
-//    timer_.cancel();
+    timer_.cancel();
 }
 
 void DummySource::on_closed()
 {
     Log::debug() << "DummySource::on_closed() called";
     signals_.cancel();
-//    timer_.cancel();
+    timer_.cancel();
 }
 
-metricq::awaitable<void> DummySource::task()
+metricq::Timer::TimerResult DummySource::timeout_cb(std::error_code)
 {
-    auto& metric = (*this)[metric_];
-
-    Log::info() << "dummy async source task started...";
-
-    while(true) {
-        co_await metricq::wait_for(io_service, interval);
-        Log::debug() << "sending metrics...";
-        auto current_time = metricq::Clock::now();
-        metric.send({current_time, 42});
-        metric.flush();
+    if (stop_requested_)
+    {
+        Log::info() << "closing source and stopping metric timer";
+        stop();
+        return metricq::Timer::TimerResult::cancel;
     }
+    Log::debug() << "sending metrics...";
+    auto current_time = metricq::Clock::now();
+    auto& metric = (*this)[metric_];
+    auto interval_ms = std::chrono::duration_cast<std::chrono::milliseconds>(interval).count();
+    metric.chunk_size(0);
+    for (int i = 0; i < messages_per_chunk_; i++)
+    {
+        double value =
+            sin(2 * 3.1415 * (chunks_sent_ + static_cast<double>(i) / messages_per_chunk_) /
+                interval_ms);
+        metric.send({ current_time, value });
+        current_time += interval / (messages_per_chunk_ + 1);
+    }
+    metric.flush();
+    chunks_sent_++;
+    if (chunks_to_send_ && chunks_sent_ >= chunks_to_send_)
+    {
+        stop();
+        return metricq::Timer::TimerResult::cancel;
+    }
+    return metricq::Timer::TimerResult::repeat;
 }
-
-//metricq::Timer::TimerResult DummySource::timeout_cb(std::error_code)
-//{
-//    if (stop_requested_)
-//    {
-//        Log::info() << "closing source and stopping metric timer";
-//        stop();
-//        return metricq::Timer::TimerResult::cancel;
-//    }
-//    Log::debug() << "sending metrics...";
-//    auto current_time = metricq::Clock::now();
-//    auto& metric = (*this)[metric_];
-//    auto interval_ms = std::chrono::duration_cast<std::chrono::milliseconds>(interval).count();
-//    metric.chunk_size(0);
-//    for (int i = 0; i < messages_per_chunk_; i++)
-//    {
-//        double value = sin(
-//            2 * 3.1415 * (chunks_sent_ + static_cast<double>(i) / messages_per_chunk_) / interval_ms);
-//        metric.send({ current_time, value });
-//        current_time += interval / (messages_per_chunk_ + 1);
-//    }
-//    metric.flush();
-//    chunks_sent_++;
-//    if (chunks_to_send_ && chunks_sent_ >= chunks_to_send_)
-//    {
-//        stop();
-//        return metricq::Timer::TimerResult::cancel;
-//    }
-//    return metricq::Timer::TimerResult::repeat;
-//}

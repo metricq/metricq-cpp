@@ -54,19 +54,19 @@ public:
     }
 
 protected:
-    void on_connected() override;
+    awaitable<void> on_connected() override;
     /**
      * Implementations of this function must add all required input_metrics
      */
     virtual void on_transformer_config(const json& config) = 0;
     virtual void on_transformer_ready() = 0;
 
-    void declare_metrics();
+    awaitable<void> declare_metrics();
 
 private:
     // Subscribe to all metrics listed in input_metrics
-    void subscribe_metrics();
-    void on_register_response(const json& response);
+    awaitable<void> subscribe_metrics();
+    awaitable<void> on_register_response(const json& response);
 
 private:
     std::string data_exchange_;

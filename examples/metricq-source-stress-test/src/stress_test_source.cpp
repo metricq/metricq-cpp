@@ -61,14 +61,14 @@ StressTestSource::StressTestSource(const std::string& manager_host, const std::s
         }
     });
 
-    connect(manager_host);
+    metricq::co_spawn(io_service, connect(manager_host), *this);
 }
 
 StressTestSource::~StressTestSource()
 {
 }
 
-void StressTestSource::on_source_config(const metricq::json& config)
+metricq::awaitable<void> StressTestSource::on_source_config(const metricq::json& config)
 {
     Log::debug() << "StressTestSource::on_source_config() called";
 
@@ -77,7 +77,7 @@ void StressTestSource::on_source_config(const metricq::json& config)
     (*this)[metric_];
 }
 
-void StressTestSource::on_source_ready()
+metricq::awaitable<void> StressTestSource::on_source_ready()
 {
     Log::debug() << "StressTestSource::on_source_ready() called";
     (*this)[metric_].metadata.unit("kittens");

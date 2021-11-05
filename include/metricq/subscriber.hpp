@@ -29,6 +29,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
+#include <metricq/awaitable.hpp>
 #include <metricq/chrono.hpp>
 #include <metricq/connection.hpp>
 
@@ -43,6 +44,7 @@ public:
     explicit Subscriber(const std::string& token, Duration expires, bool add_uuid = true);
 
     void add(const std::string& metric);
+    
     template <typename T>
     void add(const T& metrics)
     {
@@ -51,13 +53,14 @@ public:
             add(metric);
         }
     }
+
     const std::string& queue() const
     {
         return queue_;
     }
 
 protected:
-    void on_connected() override;
+    awaitable<void> on_connected() override;
 
 protected:
     std::vector<std::string> metrics_;

@@ -50,12 +50,12 @@ Sink::~Sink()
 {
 }
 
-void Sink::subscribe(const std::vector<std::string>& metrics)
+awaitable<void> Sink::subscribe(const std::vector<std::string>& metrics)
 {
-    auto response =
-        co_await rpc("sink.subscribe", { { "metrics", metrics }, { "metadata", true } });
+    auto payload = json{ { "metrics", metrics }, { "metadata", true } };
+    auto response = co_await rpc("sink.subscribe", payload);
 
-    sink_config(response);
+    co_await sink_config(response);
 
     if (this->data_queue() != response.at("dataQueue"))
     {
@@ -63,7 +63,7 @@ void Sink::subscribe(const std::vector<std::string>& metrics)
     }
 }
 
-void Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
+awaitable<void> Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
 {
     if (expires.count() <= 0)
     {
@@ -73,14 +73,14 @@ void Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
     try
     {
 
-        auto response = co_await rpc(
-            "sink.subscribe",
-            { { "metrics", metrics },
-              { "expires",
-                std::chrono::duration_cast<std::chrono::duration<double>>(expires).count() },
-              { "metadata", true } });
+        auto payload =
+            json{ { "metrics", metrics },
+                  { "expires",
+                    std::chrono::duration_cast<std::chrono::duration<double>>(expires).count() },
+                  { "metadata", true } };
+        auto response = co_await rpc("sink.subscribe", payload);
 
-        sink_config(response);
+        co_await sink_config(response);
 
         if (this->data_queue() != response.at("dataQueue"))
         {
@@ -95,9 +95,9 @@ void Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
     }
 }
 
-void Sink::sink_config(const json& config)
+awaitable<void> Sink::sink_config(const json& config)
 {
-    data_config(config);
+    co_await data_config(config);
 
     data_queue(config.at("dataQueue").get<std::string>());
 
@@ -133,17 +133,17 @@ void Sink::setup_data_consumer(const std::string& name, int message_count, int c
         log::warn("unexpected consumer count {} - are we not alone in the queue?", consumer_count);
     }
 
-    auto message_cb = [this](const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
-    { on_data(message, delivery_tag, redelivered); };
+    auto message_cb = [this](const AMQP::Message& message, uint64_t delivery_tag,
+                             bool redelivered) {
+        co_spawn(io_service, on_data(message, delivery_tag, redelivered), *this);
+    };
 
     data_channel_->consume(name)
         .onReceived(message_cb)
-        .onSuccess(
-            [this]()
-            {
-                this->is_data_queue_set_up_ = true;
-                log::debug("sink data queue consume success");
-            })
+        .onSuccess([this]() {
+            this->is_data_queue_set_up_ = true;
+            log::debug("sink data queue consume success");
+        })
         .onError(debug_error_cb("sink data queue consume error"))
         .onFinalize([]() { log::info("sink data queue consume finalize"); });
 }
@@ -167,7 +167,7 @@ void Sink::update_metadata(const json& config)
     }
 }
 
-void Sink::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
+awaitable<void> Sink::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
 {
     (void)redelivered;
     const auto& metric_name = message.routingkey();
@@ -176,7 +176,7 @@ void Sink::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool red
     data_chunk_.ParseFromString(message_body);
     try
     {
-        on_data(metric_name, data_chunk_);
+        co_await on_data(metric_name, data_chunk_);
         data_channel_->ack(delivery_tag);
     }
     catch (std::exception& ex)
@@ -186,15 +186,15 @@ void Sink::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool red
     }
 }
 
-void Sink::on_data(const std::string& id, const DataChunk& data_chunk)
+awaitable<void> Sink::on_data(const std::string& id, const DataChunk& data_chunk)
 {
     for (auto tv : data_chunk)
     {
-        on_data(id, tv);
+        co_await on_data(id, tv);
     }
 }
 
-void Sink::on_data(const std::string&, TimeValue)
+awaitable<void> Sink::on_data(const std::string&, TimeValue)
 {
     log::fatal("unhandled TimeValue data, implementation error.");
     std::abort();

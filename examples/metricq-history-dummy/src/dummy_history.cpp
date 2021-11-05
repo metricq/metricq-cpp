@@ -54,7 +54,7 @@ DummyHistory::DummyHistory(const std::string& manager_host, const std::string& t
         this->stop();
     });
 
-    connect(manager_host);
+    metricq::co_spawn(io_service, connect(manager_host), *this);
 }
 
 DummyHistory::~DummyHistory()

@@ -40,7 +40,6 @@
 #include <asio/system_timer.hpp>
 #include <asio/use_awaitable.hpp>
 
-#include <asio/defer.hpp>
 #include <future>
 #include <iostream>
 
@@ -59,10 +58,16 @@ inline void co_spawn(Executor& e, awaitable<T> a)
     asio::co_spawn(e, std::move(a), asio::detached);
 }
 
-template <typename Executor, typename T, typename Connection>
-inline void co_spawn(Executor& e, awaitable<T> a, Connection& connection)
+template <typename Connection>
+class CompletionHandler
 {
-    asio::co_spawn(e, std::move(a), [&connection](std::exception_ptr eptr) {
+public:
+    CompletionHandler(Connection& connection) : connection(connection)
+    {
+    }
+
+    void operator()(std::exception_ptr eptr)
+    {
         try
         {
             if (eptr)
@@ -74,7 +79,22 @@ inline void co_spawn(Executor& e, awaitable<T> a, Connection& connection)
         {
             connection.on_unhandled_exception(e);
         }
-    });
+    }
+
+    template <typename T>
+    void operator()(std::exception_ptr eptr, T&&)
+    {
+        (*this)(eptr);
+    }
+
+private:
+    Connection& connection;
+};
+
+template <typename Executor, typename T, typename Connection>
+inline void co_spawn(Executor& e, awaitable<T> a, Connection& connection)
+{
+    asio::co_spawn(e, std::move(a), CompletionHandler<Connection>(connection));
 }
 
 [[nodiscard]] inline awaitable<void> wait_for(asio::io_context& ctx, Duration timeout)
@@ -87,7 +107,7 @@ inline void co_spawn(Executor& e, awaitable<T> a, Connection& connection)
 template <typename T>
 [[nodiscard]] awaitable<T> wait_for(asio::io_context& ctx, std::future<T>& fut, Duration timeout)
 {
-    // At the moment of writing, asio doesn't provide it's own future/promise types (or other
+    // At the moment of writing, asio doesn't provide its own future/promise types (or other
     // coroutine primitives for that matter). Hence, we have to do it on our own.
 
     // TODO: Make this implementation efficient. This will probably require you to understand
@@ -116,7 +136,7 @@ template <typename T>
 
     if (status == std::future_status::ready)
     {
-        // The future is ready, so either it succedded, or an exception was set.
+        // The future is ready, so either it succeeded, or an exception was set.
         co_return fut.get();
     }
     else

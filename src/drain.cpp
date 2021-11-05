@@ -38,32 +38,34 @@ Drain::~Drain()
 {
 }
 
-void Drain::on_connected()
+awaitable<void> Drain::on_connected()
 {
     assert(!metrics_.empty());
-    rpc("sink.unsubscribe", [this](const auto& response) { unsubscribe_complete(response); },
-        { { "dataQueue", data_queue() }, { "metrics", metrics_ } });
-}
 
-void Drain::unsubscribe_complete(const json& response)
-{
+    auto payload = json{ { "dataQueue", data_queue() }, { "metrics", metrics_ } };
+    auto response = co_await rpc("sink.unsubscribe", payload);
+
     assert(!data_queue().empty());
 
-    sink_config(response);
+    co_await sink_config(response);
 }
 
-void Drain::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
+awaitable<void> Drain::on_data(const AMQP::Message& message, uint64_t delivery_tag,
+                               bool redelivered)
 {
     if (message.typeName() == "end")
     {
         data_channel_->ack(delivery_tag);
         log::debug("received end message");
-        // We used to close the data connection here, but this should not be necessary.
-        // It will be closed implicitly from the response callback.
-        rpc("sink.release", [this](const auto&) { close(); }, { { "dataQueue", data_queue() } });
-        return;
+
+        auto payload = json{ { "dataQueue", data_queue() } };
+        co_await rpc("sink.release", payload);
+
+        close();
+
+        co_return;
     }
 
-    Sink::on_data(message, delivery_tag, redelivered);
+    co_await Sink::on_data(message, delivery_tag, redelivered);
 }
 } // namespace metricq

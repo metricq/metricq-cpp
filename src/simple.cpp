@@ -44,7 +44,7 @@ std::string subscribe(const std::string& url, const std::string& token,
     Subscriber subscriber(token, expires);
 
     subscriber.add(metrics);
-    subscriber.connect(url);
+    co_spawn(subscriber.io_service, subscriber.connect(url));
     subscriber.main_loop();
     return subscriber.queue();
 }
@@ -61,7 +61,7 @@ drain(const std::string& url, const std::string& token, const std::vector<std::s
 {
     SimpleDrain drain(token, queue);
     drain.add(metrics);
-    drain.connect(url);
+    co_spawn(drain.io_service, drain.connect(url));
     drain.main_loop();
     return std::move(drain.get());
 }
@@ -71,7 +71,7 @@ std::vector<TimeValue> drain(const std::string& url, const std::string& token,
 {
     SimpleDrain drain(token, queue);
     drain.add(metric);
-    drain.connect(url);
+    co_spawn(drain.io_service, drain.connect(url));
     drain.main_loop();
     return std::move(drain.at(metric));
 }
@@ -86,7 +86,7 @@ std::vector<std::string> get_metrics(const std::string& url, const std::string& 
         payload["selector"] = selector;
     }
     RpcRequest request(token, "history.get_metrics", payload);
-    request.connect(url);
+    co_spawn(request.io_service, request.connect(url));
     request.main_loop();
     std::vector<std::string> response;
     for (const auto& metric : request.response().at("metrics"))
@@ -106,7 +106,7 @@ get_metadata_(const std::string& url, const std::string& token, const json& sele
         payload["selector"] = selector;
     }
     RpcRequest request(token, "get_metrics", payload);
-    request.connect(url);
+    co_spawn(request.io_service, request.connect(url));
     request.main_loop();
     std::unordered_map<std::string, Metadata> response;
     const auto& metrics_metadata = request.response().at("metrics");

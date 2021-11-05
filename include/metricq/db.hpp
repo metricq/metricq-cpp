@@ -29,6 +29,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
+#include <metricq/awaitable.hpp>
 #include <metricq/history.pb.h>
 #include <metricq/json.hpp>
 #include <metricq/sink.hpp>
@@ -51,13 +52,13 @@ protected:
 private:
     void on_history(const AMQP::Message&);
     void setup_history_queue(const AMQP::QueueCallback& callback);
-    void on_register_response(const json& response);
+    awaitable<void> on_register_response(const json& response);
     // We keep this private to avoid confusion because this is done automatically through return of
     // on_db_config
-    void db_subscribe(const json& metrics);
+    awaitable<void> db_subscribe(const json& metrics);
 
 protected:
-    void on_connected() override;
+    awaitable<void> on_connected() override;
 
 protected:
     std::string history_queue_;

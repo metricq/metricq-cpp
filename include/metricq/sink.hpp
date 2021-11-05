@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include <metricq/awaitable.hpp>
 #include <metricq/data_client.hpp>
 #include <metricq/datachunk.pb.h>
 #include <metricq/json.hpp>
@@ -54,24 +55,24 @@ protected:
      * override this only in special cases where you manually handle acknowledgements
      * or do something after acks
      */
-    virtual void on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered);
+    virtual awaitable<void> on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered);
     /**
      * override this to handle chunks efficiently
      * if you do, you don't need to override data_callback(std::string, TimeValue)
      */
-    virtual void on_data(const std::string& id, const DataChunk& chunk);
+    virtual awaitable<void> on_data(const std::string& id, const DataChunk& chunk);
     /**
      * override this to handle individual values
      */
-    virtual void on_data(const std::string& id, TimeValue tv);
+    virtual awaitable<void> on_data(const std::string& id, TimeValue tv);
 
-    void sink_config(const json& config);
+    awaitable<void> sink_config(const json& config);
 
     void update_metadata(const json& config);
 
-    void subscribe(const std::vector<std::string>& metrics);
+    awaitable<void> subscribe(const std::vector<std::string>& metrics);
 
-    void subscribe(const std::vector<std::string>& metrics, Duration expires);
+    awaitable<void> subscribe(const std::vector<std::string>& metrics, Duration expires);
 
     void data_queue(const std::string& name);
 

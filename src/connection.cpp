@@ -129,7 +129,7 @@ awaitable<void> Connection::connect(const std::string& server_address)
         });
 }
 
-void Connection::register_rpc_callback(const std::string& function, RPCCallback cb)
+void Connection::register_rpc_callback(const std::string& function, AwaitableRPCCallback cb)
 {
     auto ret = rpc_callbacks_.emplace(function, std::move(cb));
     if (!ret.second)

@@ -37,7 +37,6 @@
 
 #include <cmath>
 
-
 using Log = metricq::logger::nitro::Log;
 
 DummySink::DummySink(const std::string& manager_host, const std::string& token,
@@ -47,8 +46,6 @@ DummySink::DummySink(const std::string& manager_host, const std::string& token,
   timeout_(timeout), expected_chunk_count_(expected_chunk_count), timer_(io_service),
   timeout_timer_(io_service)
 {
-    connect(manager_host);
-
     // Register signal handlers so that the daemon may be shut down.
     signals_.async_wait([this](auto, auto signal) {
         if (!signal)
@@ -56,20 +53,24 @@ DummySink::DummySink(const std::string& manager_host, const std::string& token,
             return;
         }
         Log::info() << "Caught signal " << signal << ". Shutdown.";
-        rpc("sink.unsubscribe", [this](const auto&) { (void)this; },
-            { { "dataQueue", data_queue() }, { "metrics", metrics_ } });
+        auto payload = metricq::json{ { "dataQueue", data_queue() }, { "metrics", metrics_ } };
+        metricq::co_spawn(this->io_service, rpc("sink.unsubscribe", payload), *this);
         timer_.cancel();
         timeout_timer_.cancel();
     });
+
+    metricq::co_spawn(io_service, connect(manager_host), *this);
 }
 
-void DummySink::on_connected()
+metricq::awaitable<void> DummySink::on_connected()
 {
-    this->subscribe(metrics_);
+    co_await subscribe(metrics_);
     start_time_ = metricq::Clock::now();
+
+    co_return;
 }
 
-void DummySink::on_data_channel_ready()
+metricq::awaitable<void> DummySink::on_data_channel_ready()
 {
     Log::info() << "DummySink data channel is ready! Metric metadata:";
     for (const auto& elem : metadata_)
@@ -113,6 +114,8 @@ void DummySink::on_data_channel_ready()
             },
             timeout_);
     }
+
+    co_return;
 }
 
 void DummySink::on_error(const std::string& message)
@@ -132,19 +135,23 @@ void DummySink::on_closed()
     timeout_timer_.cancel();
 }
 
-void DummySink::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
+metricq::awaitable<void> DummySink::on_data(const AMQP::Message& message, uint64_t delivery_tag,
+                                            bool redelivered)
 {
     if (message.typeName() == "end")
     {
         data_channel_->ack(delivery_tag);
         Log::debug() << "received end message";
-        // We used to close the data connection here, but this should not be necessary.
-        // It will be closed implicitly from the response callback.
-        rpc("sink.release", [this](const auto&) { close(); }, { { "dataQueue", data_queue() } });
-        return;
+
+        auto payload = metricq::json{ { "dataQueue", data_queue() } };
+        co_await rpc("sink.release", payload);
+
+        close();
+
+        co_return;
     }
 
-    Sink::on_data(message, delivery_tag, redelivered);
+    co_await Sink::on_data(message, delivery_tag, redelivered);
     chunk_count_++;
 
     if (timeout_timer_.running())
@@ -158,8 +165,10 @@ void DummySink::on_data(const AMQP::Message& message, uint64_t delivery_tag, boo
     }
 }
 
-void DummySink::on_data(const std::string& name, metricq::TimeValue tv)
+metricq::awaitable<void> DummySink::on_data(const std::string& name, metricq::TimeValue tv)
 {
     Log::debug() << "Received data for metric " << name << ": " << tv;
     message_count_++;
+
+    co_return;
 }

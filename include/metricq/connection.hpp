@@ -55,7 +55,7 @@ public:
     void main_loop();
 
 protected:
-    using RPCCallback = std::function<awaitable<json>(const json& response)>;
+    using AwaitableRPCCallback = std::function<awaitable<json>(const json& response)>;
 
     explicit Connection(const std::string& connection_token, bool add_uuid = false,
                         std::size_t concurrency_hint = 1);
@@ -86,7 +86,7 @@ protected:
 
     awaitable<json> rpc(const std::string& function, json payload = json({}),
                         Duration timeout = std::chrono::seconds(60));
-    void register_rpc_callback(const std::string& function, RPCCallback callback);
+    void register_rpc_callback(const std::string& function, AwaitableRPCCallback callback);
 
     std::string prepare_message(const std::string& function, json payload);
     std::unique_ptr<AMQP::Envelope> prepare_rpc_envelope(const std::string& message);
@@ -114,7 +114,7 @@ private:
     // TODO combine & abstract to extra class
     std::unique_ptr<AsioConnectionHandler> management_connection_;
     std::unique_ptr<AMQP::Channel> management_channel_;
-    std::unordered_map<std::string, RPCCallback> rpc_callbacks_;
+    std::unordered_map<std::string, AwaitableRPCCallback> rpc_callbacks_;
     std::unordered_map<std::string, std::promise<json>> rpc_promises_;
     std::string management_client_queue_;
     std::string management_queue_ = "management";

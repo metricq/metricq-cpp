@@ -36,10 +36,10 @@ namespace metricq
 {
 Db::Db(const std::string& token) : Sink(token)
 {
-    register_rpc_callback("config", [this](const json& config) {
+    register_rpc_callback("config", [this](const json& config) -> awaitable<json> {
         auto subscribe_metrics = on_db_config(config);
-        this->subscribe(subscribe_metrics);
-        return json::object();
+        co_await this->subscribe(subscribe_metrics);
+        co_return json::object();
     });
 }
 
@@ -76,21 +76,23 @@ void Db::on_history(const AMQP::Message& incoming_message)
     data_channel_->publish("", incoming_message.replyTo(), envelope);
 }
 
-void Db::on_connected()
+awaitable<void> Db::on_connected()
 {
-    rpc("db.register", [this](const auto& response) { on_register_response(response); });
+    auto response = co_await rpc("db.register");
+
+    co_await on_register_response(response);
 }
 
-void Db::on_register_response(const json& response)
+awaitable<void> Db::on_register_response(const json& response)
 {
     log::debug("start parsing config");
 
-    sink_config(response);
+    co_await sink_config(response);
 
     history_queue_ = response["historyQueue"].get<std::string>();
 
     auto subscribe_metrics = on_db_config(response["config"].get<std::string>());
-    db_subscribe(subscribe_metrics);
+    co_await db_subscribe(subscribe_metrics);
 
     setup_history_queue([this](const std::string& name, int message_count, int consumer_count) {
         log::notice("setting up history queue, messages {}, consumers {}", message_count,
@@ -121,24 +123,21 @@ void Db::on_register_response(const json& response)
     on_db_ready();
 }
 
-void Db::db_subscribe(const json& metrics)
+awaitable<void> Db::db_subscribe(const json& metrics)
 {
     // TODO reduce redundancy with Sink::subscribe
-    rpc("db.subscribe",
-        [this](const json& response) {
-            if (this->data_queue().empty() || this->history_queue_.empty())
-            {
-                // Data queue should really be filled already by the db.register
-                throw std::runtime_error(
-                    "data_queue or history_queue empty upon db.subscribe return");
-            }
-            if (this->data_queue() != response.at("dataQueue") ||
-                this->history_queue_ != response.at("historyQueue"))
-            {
-                throw std::runtime_error(
-                    "inconsistent dataQueue or historyQueue from db.subscribe");
-            }
-        },
-        { { "metrics", metrics }, { "metadata", false } });
+    auto payload = json{ { "metrics", metrics }, { "metadata", false } };
+    auto response = co_await rpc("db.subscribe", payload);
+
+    if (this->data_queue().empty() || this->history_queue_.empty())
+    {
+        // Data queue should really be filled already by the db.register
+        throw std::runtime_error("data_queue or history_queue empty upon db.subscribe return");
+    }
+    if (this->data_queue() != response.at("dataQueue") ||
+        this->history_queue_ != response.at("historyQueue"))
+    {
+        throw std::runtime_error("inconsistent dataQueue or historyQueue from db.subscribe");
+    }
 }
 } // namespace metricq

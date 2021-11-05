@@ -53,15 +53,11 @@ public:
     }
 
 protected:
-    void on_connected() override
+    awaitable<void> on_connected() override
     {
-        rpc(
-            function_,
-            [this](const json& response) {
-                response_ = response;
-                stop();
-            },
-            payload_);
+        response_ = co_await rpc(function_, payload_);
+
+        stop();
     }
 
 protected:

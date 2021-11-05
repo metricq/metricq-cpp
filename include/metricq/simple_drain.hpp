@@ -48,7 +48,7 @@ public:
 
     using Drain::on_data;
 
-    void on_data(const std::string& id, const metricq::DataChunk& chunk) override
+    awaitable<void> on_data(const std::string& id, const metricq::DataChunk& chunk) override
     {
         auto& d = data_.at(id);
         // clang was rightfully complaining about the following line. The DataChunkIter,
@@ -58,6 +58,8 @@ public:
         {
             d.emplace_back(tv);
         }
+
+        co_return;
     }
 
     /**
@@ -77,9 +79,9 @@ public:
     }
 
 protected:
-    void on_connected() override
+    awaitable<void> on_connected() override
     {
-        Drain::on_connected();
+        co_await Drain::on_connected();
         for (const auto& metric : metrics_)
         {
             data_[metric];

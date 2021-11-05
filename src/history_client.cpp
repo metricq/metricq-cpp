@@ -44,7 +44,9 @@ namespace metricq
 {
 HistoryClient::HistoryClient(const std::string& token, bool add_uuid) : Connection(token, add_uuid)
 {
-    register_rpc_callback("discover", std::bind(&HistoryClient::handle_discover_rpc, this, _1));
+    register_rpc_callback("discover", [this](auto& request) -> awaitable<json> {
+        co_return handle_discover_rpc(request);
+    });
 }
 
 HistoryClient::~HistoryClient() = default;
@@ -111,14 +113,16 @@ void HistoryClient::on_history_response(const AMQP::Message& incoming_message)
     on_history_response(incoming_message.correlationID(), history_response_);
 }
 
-void HistoryClient::on_connected()
+awaitable<void> HistoryClient::on_connected()
 {
-    rpc("history.register", [this](const auto& response) { config(response); });
+    auto response = co_await rpc("history.register");
+
+    co_await config(response);
 }
 
-void HistoryClient::config(const metricq::json& config)
+awaitable<void> HistoryClient::config(const metricq::json& config)
 {
-    history_config(config);
+    co_await history_config(config);
 
     if (!history_exchange_.empty() &&
         config["historyExchange"].get<std::string>() != history_exchange_)
@@ -137,11 +141,12 @@ void HistoryClient::config(const metricq::json& config)
     on_history_ready();
 }
 
-void HistoryClient::on_history_channel_ready()
+awaitable<void> HistoryClient::on_history_channel_ready()
 {
+    co_return;
 }
 
-void HistoryClient::history_config(const json& config)
+awaitable<void> HistoryClient::history_config(const json& config)
 {
     AMQP::Address new_data_server_address =
         derive_address(config["dataServerAddress"].get<std::string>());
@@ -155,7 +160,7 @@ void HistoryClient::history_config(const json& config)
             std::abort();
         }
         // We should be fine, connection and channel is already setup and the same
-        return;
+        co_return;
     }
 
     data_server_address_ = new_data_server_address;
@@ -172,11 +177,11 @@ void HistoryClient::history_config(const json& config)
             std::make_unique<PlainConnectionHandler>(io_service, "Hist connection", token());
     }
 
-    history_connection_->connect(*data_server_address_);
+    co_await history_connection_->connect(*data_server_address_);
     history_channel_ = history_connection_->make_channel();
     history_channel_->onReady([this]() {
         log::debug("history_channel ready");
-        this->on_history_channel_ready();
+        co_spawn(io_service, on_history_channel_ready(), *this);
     });
     history_channel_->onError(debug_error_cb("history channel error"));
 }

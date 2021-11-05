@@ -50,7 +50,7 @@ DummyTransformer::DummyTransformer(const std::string& manager_host, const std::s
         close();
     });
 
-    connect(manager_host);
+    metricq::co_spawn(io_service, connect(manager_host), *this);
 }
 
 DummyTransformer::~DummyTransformer()
@@ -91,7 +91,7 @@ void DummyTransformer::on_transformer_ready()
     Log::info() << "DummyTransformer ready";
 }
 
-void DummyTransformer::on_data(const std::string& id, metricq::TimeValue tv)
+metricq::awaitable<void> DummyTransformer::on_data(const std::string& id, metricq::TimeValue tv)
 {
     try
     {
@@ -105,4 +105,6 @@ void DummyTransformer::on_data(const std::string& id, metricq::TimeValue tv)
         Log::error() << "received unexpected metric id: " << id;
         throw;
     }
+
+    co_return;
 }

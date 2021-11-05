@@ -28,6 +28,8 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
+
+#include <metricq/awaitable.hpp>
 #include <metricq/sink.hpp>
 
 #include <string>
@@ -60,12 +62,10 @@ public:
     }
 
 protected:
-    void on_connected() override;
+    awaitable<void> on_connected() override;
 
-    void on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered) override;
-
-private:
-    void unsubscribe_complete(const json& response);
+    awaitable<void> on_data(const AMQP::Message& message, uint64_t delivery_tag,
+                            bool redelivered) override;
 
 protected:
     std::vector<std::string> metrics_;

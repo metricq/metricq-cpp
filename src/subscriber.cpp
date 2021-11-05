@@ -45,15 +45,15 @@ void Subscriber::add(const std::string& metric)
     metrics_.emplace_back(metric);
 }
 
-void Subscriber::on_connected()
+awaitable<void> Subscriber::on_connected()
 {
-    rpc("sink.subscribe",
-        [this](const json& response) {
-            queue_ = response["dataQueue"].get<std::string>();
-            stop();
-        },
-        { { "metrics", metrics_ },
-          { "expires",
-            std::chrono::duration_cast<std::chrono::duration<double>>(expires_).count() } });
+    auto payload =
+        json{ { "metrics", metrics_ },
+              { "expires",
+                std::chrono::duration_cast<std::chrono::duration<double>>(expires_).count() } };
+    auto response = co_await rpc("sink.subscribe", payload);
+
+    queue_ = response["dataQueue"].get<std::string>();
+    stop();
 }
 } // namespace metricq

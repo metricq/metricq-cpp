@@ -27,6 +27,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
+#include <metricq/awaitable.hpp>
 #include <metricq/chrono.hpp>
 #include <metricq/sink.hpp>
 #include <metricq/timer.hpp>
@@ -49,11 +50,12 @@ protected:
 private:
     using metricq::Sink::on_data;
 
-    void on_connected() override;
+    metricq::awaitable<void> on_connected() override;
 
-    void on_data_channel_ready() override;
-    void on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered) override;
-    void on_data(const std::string& id, metricq::TimeValue tv) override;
+    metricq::awaitable<void> on_data_channel_ready() override;
+    
+    metricq::awaitable<void> on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered) override;
+    metricq::awaitable<void> on_data(const std::string& id, metricq::TimeValue tv) override;
 
     asio::signal_set signals_;
 

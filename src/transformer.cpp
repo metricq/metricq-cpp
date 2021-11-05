@@ -37,16 +37,18 @@ namespace metricq
 {
 Transformer::Transformer(const std::string& token) : Sink(token)
 {
-    register_rpc_callback("config", [this](const json& config) -> json {
+    register_rpc_callback("config", [this](const json& config) -> awaitable<json> {
         this->on_transformer_config(config);
-        this->subscribe_metrics();
-        return metricq::json::object();
+        co_await this->subscribe_metrics();
+        co_return json::object();
     });
 }
 
-void Transformer::on_connected()
+awaitable<void> Transformer::on_connected()
 {
-    rpc("transformer.register", [this](const auto& response) { on_register_response(response); });
+    auto response = co_await rpc("transformer.register");
+
+    co_await on_register_response(response);
 }
 
 void Transformer::send(const std::string& id, const DataChunk& dc)
@@ -60,41 +62,41 @@ void Transformer::send(const std::string& id, TimeValue tv)
     data_channel_->publish(data_exchange_, id, DataChunk(tv).SerializeAsString());
 }
 
-void Transformer::subscribe_metrics()
+awaitable<void> Transformer::subscribe_metrics()
 {
     if (input_metrics.empty())
     {
         log::fatal("required input metrics not set");
         std::abort();
     }
-    rpc("transformer.subscribe",
-        [this](const json& response) {
-            this->sink_config(response);
 
-            assert(this->data_queue() == response.at("dataQueue"));
+    auto payload = json{ { "metrics", input_metrics } };
+    auto response = co_await rpc("transformer.subscribe", payload);
 
-            on_transformer_ready();
-            declare_metrics();
-        },
-        { { "metrics", input_metrics } });
+    co_await this->sink_config(response);
+
+    assert(this->data_queue() == response.at("dataQueue"));
+
+    on_transformer_ready();
+    co_await declare_metrics();
 }
 
-void Transformer::on_register_response(const json& response)
+awaitable<void> Transformer::on_register_response(const json& response)
 {
     assert(this->data_exchange_.empty());
 
     // TODO: check if there's a better error to throw than what at() and get() throw in case any of
     // the required fields is missing.
-    this->data_exchange_ = response.at("dataExchange").get<std::string>();
-    this->on_transformer_config(response.at("config"));
-    this->subscribe_metrics();
+    data_exchange_ = response.at("dataExchange").get<std::string>();
+    on_transformer_config(response.at("config"));
+    co_await subscribe_metrics();
 }
 
-void Transformer::declare_metrics()
+awaitable<void> Transformer::declare_metrics()
 {
     if (output_metrics_.empty())
     {
-        return;
+        co_return;
     }
 
     json payload;
@@ -107,11 +109,6 @@ void Transformer::declare_metrics()
 
         payload["metrics"][metric.second.id()] = metric.second.metadata.json();
     }
-    rpc(
-        "transformer.declare_metrics",
-        [this](const auto&) { /* nothing to do */
-                              (void)this;
-        },
-        payload);
+    co_await rpc("transformer.declare_metrics", payload);
 }
 } // namespace metricq
