@@ -29,6 +29,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "log.hpp"
+#include "raise.hpp"
 #include "util.hpp"
 
 #include <metricq/db.hpp>
@@ -118,6 +119,20 @@ void Db::HistoryCompletion::operator()(const metricq::HistoryResponse& response)
             std::chrono::duration_cast<std::chrono::duration<float>>(processing_duration).count(),
             reply_to);
     }
+
+    // We still have the potential problem that preparing the response takes to long,
+    // but at least we don´t kill the channel anymore.
+    // Note: Though RabbitMQ's hard max message size is 512MiB, the default configured max message
+    // size is only 128 MiB, and we are a bit conservative here:
+    // TODO read the message size from the broker, but I haven't seen an interface for that.
+    const auto MAX_MESSAGE_SIZE = 100u * 1024u * 1024u;
+    if (reply_message.size() > MAX_MESSAGE_SIZE)
+    {
+        raise<MaxMessageSizeExceeded>(
+            "Response message size for {} (request from {}) is to big: {} B (>{} B)",
+            correlation_id, reply_to, reply_message.size(), MAX_MESSAGE_SIZE);
+    }
+
     auto run = [processing_duration, begin_handling = this->begin_handling_,
                 reply_message = std::move(reply_message),
                 correlation_id = std::move(correlation_id), reply_to = std::move(reply_to),

@@ -1,4 +1,4 @@
-// Copyright (c) 2019, ZIH,
+// Copyright (c) 2021, ZIH,
 // Technische Universitaet Dresden,
 // Federal Republic of Germany
 //
@@ -27,39 +27,20 @@
 // LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 #pragma once
 
-#include <stdexcept>
+#include <metricq/exception.hpp>
+
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 
 namespace metricq
 {
-class Exception : public std::runtime_error
+
+template <typename Exception, typename... Args>
+[[noreturn]] inline void raise(fmt::string_view format, const Args&... args)
 {
-public:
-    using std::runtime_error::runtime_error;
-};
-
-class ConnectionError : public Exception
-{
-public:
-    using Exception::Exception;
-};
-
-class MaxMessageSizeExceeded : public Exception
-{
-public:
-    using Exception::Exception;
-};
-
-class RPCError : public Exception
-{
-public:
-    using Exception::Exception;
-
-    RPCError() : Exception("RPC error")
-    {
-    }
-};
-
+    log::error(format, args...);
+    throw Exception(fmt::format(format, args...));
+}
 } // namespace metricq
