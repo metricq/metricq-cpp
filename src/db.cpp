@@ -125,11 +125,11 @@ void Db::HistoryCompletion::operator()(const metricq::HistoryResponse& response)
     // Note: Though RabbitMQ's hard max message size is 512MiB, the default configured max message
     // size is only 128 MiB, and we are a bit conservative here:
     // TODO read the message size from the broker, but I haven't seen an interface for that.
-    const auto MAX_MESSAGE_SIZE = 100u * 1024u * 1024u;
+    const auto MAX_MESSAGE_SIZE = 100ull * 1024ull * 1024ull;
     if (reply_message.size() > MAX_MESSAGE_SIZE)
     {
         raise<MaxMessageSizeExceeded>(
-            "Response message size for {} (request from {}) is to big: {} B (>{} B)",
+            "Response message size for {} (requested from {}) would be too big: {} B (>{} B).",
             correlation_id, reply_to, reply_message.size(), MAX_MESSAGE_SIZE);
     }
 
