@@ -93,7 +93,7 @@ target_link_libraries(metricq-core
     PUBLIC
         asio::asio
         amqpcpp::amqpcpp
-        json::json
+        nlohmann_json::nlohmann_json
         metricq::protobuf
     PRIVATE
         fmt::fmt-header-only

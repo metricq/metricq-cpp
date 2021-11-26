@@ -52,7 +52,7 @@ Sink::~Sink()
 {
 }
 
-void Sink::subscribe(const std::vector<std::string>& metrics, int64_t expires)
+void Sink::subscribe(const std::vector<std::string>& metrics)
 {
     rpc("sink.subscribe",
         [this](const json& response) {
@@ -63,7 +63,28 @@ void Sink::subscribe(const std::vector<std::string>& metrics, int64_t expires)
                 throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
             }
         },
-        { { "metrics", metrics }, { "expires", expires }, { "metadata", true } });
+        { { "metrics", metrics }, { "metadata", true } });
+}
+
+void Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
+{
+    if (expires.count() <= 0)
+    {
+        throw std::runtime_error("Expires must be >0");
+    }
+
+    rpc("sink.subscribe",
+        [this](const json& response) {
+            this->sink_config(response);
+
+            if (this->data_queue() != response.at("dataQueue"))
+            {
+                throw std::runtime_error("inconsistent sink dataQueue setting after subscription");
+            }
+        },
+        { { "metrics", metrics },
+          { "expires", std::chrono::duration_cast<std::chrono::duration<double>>(expires).count() },
+          { "metadata", true } });
 }
 
 void Sink::sink_config(const json& config)

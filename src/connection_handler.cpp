@@ -60,21 +60,23 @@ void QueuedBuffer::consume(std::size_t consumed_bytes)
     }
 }
 
-AsioConnectionHandler::AsioConnectionHandler(asio::io_service& io_service, const std::string& name)
+AsioConnectionHandler::AsioConnectionHandler(asio::io_service& io_service, const std::string& name,
+                                             const std::string& token)
 : heartbeat_timer_(io_service), heartbeat_interval_(std::chrono::seconds(0)), resolver_(io_service),
-  name_(name)
+  name_(name), token_(token)
 {
 }
 
 PlainConnectionHandler::PlainConnectionHandler(asio::io_service& io_service,
-                                               const std::string& name)
-: AsioConnectionHandler(io_service, name), socket_(io_service)
+                                               const std::string& name, const std::string& token)
+: AsioConnectionHandler(io_service, name, token), socket_(io_service)
 {
     log::debug("[{}] Using plaintext connection.", name_);
 }
 
-SSLConnectionHandler::SSLConnectionHandler(asio::io_service& io_service, const std::string& name)
-: AsioConnectionHandler(io_service, name), ssl_context_(asio::ssl::context::tls),
+SSLConnectionHandler::SSLConnectionHandler(asio::io_service& io_service, const std::string& name,
+                                           const std::string& token)
+: AsioConnectionHandler(io_service, name, token), ssl_context_(asio::ssl::context::tls),
   socket_(io_service, ssl_context_)
 {
     log::debug("[{}] Using SSL-secured connection.", name_);
@@ -198,6 +200,16 @@ void AsioConnectionHandler::onHeartbeat(AMQP::Connection* connection)
     (void)connection;
 
     log::trace("[{}] Received heartbeat from server", name_);
+}
+
+void AsioConnectionHandler::onProperties(AMQP::Connection* connection, const AMQP::Table& server,
+                                         AMQP::Table& client)
+{
+    // make sure compilers dont complaint about unused parameters
+    (void)connection;
+    (void)server;
+
+    client.set("connection_name", name_ + std::string(" ") + token_);
 }
 
 /**

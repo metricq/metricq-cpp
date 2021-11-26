@@ -39,9 +39,9 @@
 namespace metricq
 {
 std::string subscribe(const std::string& url, const std::string& token,
-                      const std::vector<std::string>& metrics, Duration timeout);
+                      const std::vector<std::string>& metrics, Duration expires);
 std::string subscribe(const std::string& url, const std::string& token, const std::string& metric,
-                      Duration timeout);
+                      Duration expires);
 
 std::unordered_map<std::string, std::vector<TimeValue>>
 drain(const std::string& url, const std::string& token, const std::vector<std::string>& metrics,

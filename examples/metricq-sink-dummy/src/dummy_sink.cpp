@@ -29,11 +29,14 @@
 
 #include <metricq/logger/nitro.hpp>
 
+#include <metricq/exception.hpp>
 #include <metricq/ostream.hpp>
 #include <metricq/types.hpp>
 
+#include <iomanip>
+
 #include <cmath>
-#include <metricq/exception.hpp>
+
 
 using Log = metricq::logger::nitro::Log;
 

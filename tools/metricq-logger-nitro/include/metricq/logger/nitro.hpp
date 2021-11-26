@@ -38,8 +38,6 @@
 #include <nitro/log/sink/syslog.hpp>
 #endif
 
-// Remove this once this is fixed in date: https://github.com/HowardHinnant/date/issues/338
-#define HAS_UNCAUGHT_EXCEPTIONS 1
 #include <date/date.h>
 #include <date/tz.h>
 

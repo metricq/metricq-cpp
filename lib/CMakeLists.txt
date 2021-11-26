@@ -1,13 +1,26 @@
-add_subdirectory(json)
+include(FetchContent)
+
+FetchContent_Declare(json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.9.1)
+
+FetchContent_GetProperties(json)
+if(NOT json_POPULATED)
+  FetchContent_Populate(json)
+  set(JSON_BuildTests OFF CACHE INTERNAL "")
+  set(JSON_SystemInclude ON CACHE INTERNAL "")
+  set(JSON_MultipleHeaders ON CACHE INTERNAL "")
+  add_subdirectory(${json_SOURCE_DIR} ${json_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
 
 # Don't test external projects.
 set(ENABLE_DATE_TESTING OFF CACHE INTERNAL "" FORCE)
 # Otherwise curl is required.
 set(USE_SYSTEM_TZ_DB ON CACHE INTERNAL "" FORCE)
+# Build the tz library
+set(BUILD_TZ_LIB ON CACHE INTERNAL "" FORCE)
 add_subdirectory(date)
-# Can be removed once this is fixed: https://github.com/HowardHinnant/date/issues/338
-target_compile_definitions(tz PRIVATE HAS_UNCAUGHT_EXCEPTIONS=1)
-set_target_properties(tz PROPERTIES POSITION_INDEPENDENT_CODE ${METRICQ_POSITION_INDEPENDENT_CODE})
+set_target_properties(date-tz PROPERTIES POSITION_INDEPENDENT_CODE ${METRICQ_POSITION_INDEPENDENT_CODE})
 
 
 include(GNUInstallDirs)
@@ -33,12 +46,15 @@ amqpcpp/src/deferredconfirm.cpp
 amqpcpp/src/deferredconsumer.cpp
 amqpcpp/src/deferredextreceiver.cpp
 amqpcpp/src/deferredget.cpp
-amqpcpp/src/deferredpublisher.cpp
+amqpcpp/src/deferredrecall.cpp
 amqpcpp/src/deferredreceiver.cpp
+amqpcpp/src/inbuffer.cpp
 amqpcpp/src/field.cpp
 amqpcpp/src/flags.cpp
 amqpcpp/src/receivedframe.cpp
 amqpcpp/src/table.cpp
+amqpcpp/src/tagger.cpp
+amqpcpp/src/throttle.cpp
 amqpcpp/src/watchable.cpp
 )
 

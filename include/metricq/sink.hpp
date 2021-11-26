@@ -98,7 +98,9 @@ protected:
 
     void update_metadata(const json& config);
 
-    void subscribe(const std::vector<std::string>& metrics, int64_t expires = 0);
+    void subscribe(const std::vector<std::string>& metrics);
+
+    void subscribe(const std::vector<std::string>& metrics, Duration expires);
 
     void data_queue(const std::string& name);
 

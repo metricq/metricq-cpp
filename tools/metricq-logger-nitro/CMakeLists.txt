@@ -21,8 +21,8 @@ target_link_libraries(metricq-logger-nitro
     PUBLIC
         Nitro::log
         Nitro::env
-        date_interface
-        tz
+        date::date
+        date::date-tz
 )
 
 install(TARGETS metricq-logger-nitro
