@@ -35,6 +35,7 @@
 
 #include "connection_handler.hpp"
 #include "log.hpp"
+#include "raise.hpp"
 #include "util.hpp"
 
 #include <metricq/logger.hpp>
@@ -74,7 +75,7 @@ void Connection::main_loop()
     io_service.run();
 }
 
-awaitable<void> Connection::connect(const std::string& server_address)
+Awaitable<void> Connection::connect(const std::string& server_address)
 {
     management_address_ = server_address;
 
@@ -166,22 +167,30 @@ std::unique_ptr<AMQP::Envelope> Connection::prepare_rpc_envelope(const std::stri
     return envelope;
 }
 
-awaitable<json> Connection::rpc(const std::string& function, json payload, Duration timeout)
+Awaitable<json> Connection::rpc(const std::string& function, json payload, Duration timeout)
 {
-    log::debug("sending rpc: {}", function);
 
     auto message = prepare_message(function, std::move(payload));
     auto envelope = prepare_rpc_envelope(message);
 
-    auto future = rpc_promises_[envelope->correlationID()].get_future();
+    log::debug("sending rpc: {} : {}", envelope->correlationID(), function);
+
+    rpc_promises_.emplace(envelope->correlationID(), io_service);
+
+    auto future = rpc_promises_.at(envelope->correlationID()).get_future();
+    auto cleanup_promise =
+        finally([this, &envelope]() { rpc_promises_.erase(envelope->correlationID()); });
 
     management_channel_->publish(management_exchange_, function, *envelope);
 
-    auto response = co_await wait_for(io_service, future, timeout);
-
-    rpc_promises_.erase(envelope->correlationID());
-
-    co_return response;
+    try
+    {
+        co_return co_await future.get(timeout);
+    }
+    catch (TimeoutError&)
+    {
+        raise<RPCError>("{} rpc timed out.", function);
+    }
 }
 
 void Connection::handle_management_message(const AMQP::Message& incoming_message,
@@ -189,7 +198,10 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
 {
     const std::string content_str(incoming_message.body(),
                                   static_cast<size_t>(incoming_message.bodySize()));
-    log::debug("Management message received: {}", truncate_string(content_str, 100));
+
+    // log::debug("Management message received: {}", truncate_string(content_str, 100));
+    log::debug("Management message received: {} : {}", incoming_message.correlationID(),
+               content_str);
 
     auto content = json::parse(content_str);
 
@@ -220,6 +232,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
                    "response: {}\n{}",
                    incoming_message.correlationID(), content_str);
 
+        // TODO Why not reject such messages?
         management_channel_->ack(deliveryTag);
 
         return;
@@ -232,11 +245,13 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
         log::debug("management rpc call received: {}", truncate_string(content_str, 100));
         // incoming message is a RPC-call
 
+        management_channel_->ack(deliveryTag);
+
         co_spawn(
             io_service,
             [this, correlation_id = incoming_message.correlationID(),
              reply_to = incoming_message.replyTo(), content, content_str, function,
-             callback = it->second]() -> awaitable<void> {
+             callback = it->second]() -> Awaitable<void> {
                 try
                 {
                     auto response = co_await callback(content);
@@ -267,7 +282,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
                     log::error("error in rpc handling {}: {}\n{}", function, e.what(), content_str);
                     throw RPCError();
                 }
-            }(),
+            },
             *this);
         return;
     }
@@ -294,26 +309,54 @@ AMQP::Address Connection::derive_address(const std::string& address_str)
 
 void Connection::on_unhandled_exception(const std::exception& e)
 {
-    log::fatal("Unhandled Exception: {}", e.what());
+    log::fatal(e.what());
 
-    close();
+    // As we are in the error handler, we shouldn't register ourself as
+    // error handler again.
+    co_spawn(io_service, close());
 }
 
-void Connection::close()
+Awaitable<void> Connection::close()
 {
     if (!management_connection_)
     {
         log::debug("closing connection, no management_connection up yet");
         on_closed();
-        return;
+        co_return;
     }
-    management_connection_->close();
+
+    // for (auto& promise : this->rpc_promises_)
+    // {
+    //     log::debug("crippling remaining promise");
+    //     promise.second.set_exception(std::make_exception_ptr(ConnectionClosedError("WHAAAAAA")));
+    // }
+
+    // co_await wait_for(std::chrono::milliseconds(10));
+
+    AsyncPromise<void> closed(io_service);
+
+    management_connection_->close([this, &closed]() {
+        // for (auto& promise : this->rpc_promises_)
+        // {
+        //     log::debug("crippling remaining promise");
+        //     // promise.second.set_exception(
+        //     //     std::make_exception_ptr(ConnectionClosedError("WHAAAAAA")));
+
+        //     promise.second.cancel();
+        // }
+        log::info("closed management connection");
+        on_closed();
+        closed.set_done();
+    });
+
+    auto future = closed.get_future();
+    co_await future.get();
 }
 
 void Connection::stop()
 {
     log::debug("Stop requested. Closing connection.");
-    close();
+    co_spawn(io_service, close(), *this);
     // the io_service will stop itself once all connections are closed
 }
 

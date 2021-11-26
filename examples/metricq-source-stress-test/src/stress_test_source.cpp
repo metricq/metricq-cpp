@@ -68,16 +68,18 @@ StressTestSource::~StressTestSource()
 {
 }
 
-metricq::awaitable<void> StressTestSource::on_source_config(const metricq::json& config)
+metricq::Awaitable<void> StressTestSource::on_source_config(const metricq::json& config)
 {
     Log::debug() << "StressTestSource::on_source_config() called";
 
     metric_ = config.at("metric").get<std::string>();
 
     (*this)[metric_];
+
+    co_return;
 }
 
-metricq::awaitable<void> StressTestSource::on_source_ready()
+metricq::Awaitable<void> StressTestSource::on_source_ready()
 {
     Log::debug() << "StressTestSource::on_source_ready() called";
     (*this)[metric_].metadata.unit("kittens");
@@ -90,6 +92,8 @@ metricq::awaitable<void> StressTestSource::on_source_ready()
                  std::chrono::milliseconds(interval_ms));
 
     running_ = true;
+
+    co_return;
 }
 
 void StressTestSource::on_error(const std::string& message)

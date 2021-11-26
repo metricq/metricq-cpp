@@ -37,8 +37,9 @@
 
 using Log = metricq::logger::nitro::Log;
 
-AsyncSource::AsyncSource(const std::string& token, metricq::Duration interval,
-                         const std::string& metric, int messages_per_chunk)
+AsyncSource::AsyncSource(const std::string& server, const std::string& token,
+                         metricq::Duration interval, const std::string& metric,
+                         int messages_per_chunk)
 : metricq::Source(token), signals_(io_service, SIGINT, SIGTERM), interval(interval),
   metric_(metric), messages_per_chunk_(messages_per_chunk)
 {
@@ -54,13 +55,15 @@ AsyncSource::AsyncSource(const std::string& token, metricq::Duration interval,
 
         stop_requested_ = true;
     });
+
+    metricq::co_spawn(io_service, connect(server), *this);
 }
 
 AsyncSource::~AsyncSource()
 {
 }
 
-metricq::awaitable<void> AsyncSource::on_source_config(const metricq::json&)
+metricq::Awaitable<void> AsyncSource::on_source_config(const metricq::json&)
 {
     Log::debug() << "AsyncSource::on_source_config() called";
     (*this)[metric_];
@@ -68,7 +71,7 @@ metricq::awaitable<void> AsyncSource::on_source_config(const metricq::json&)
     co_return;
 }
 
-metricq::awaitable<void> AsyncSource::on_source_ready()
+metricq::Awaitable<void> AsyncSource::on_source_ready()
 {
     Log::debug() << "AsyncSource::on_source_ready() called";
     (*this)[metric_].metadata.unit("kittens");
@@ -94,7 +97,7 @@ void AsyncSource::on_closed()
     signals_.cancel();
 }
 
-metricq::awaitable<void> AsyncSource::task()
+metricq::Awaitable<void> AsyncSource::task()
 {
     auto& metric = (*this)[metric_];
 
@@ -107,7 +110,7 @@ metricq::awaitable<void> AsyncSource::task()
         if (!sends_till_throw--)
             throw std::runtime_error("Hello there!");
 
-        co_await metricq::wait_for(io_service, interval);
+        co_await metricq::wait_for(interval);
         Log::debug() << "sending metrics...";
         auto current_time = metricq::Clock::now();
         metric.send({ current_time, 42 });

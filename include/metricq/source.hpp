@@ -70,18 +70,18 @@ public:
     }
 
 protected:
-    awaitable<void> on_connected() override;
-    awaitable<void> on_data_channel_ready() override;
+    Awaitable<void> on_connected() override;
+    Awaitable<void> on_data_channel_ready() override;
 
 protected:
-    virtual metricq::awaitable<void> on_source_config(const json& config) = 0;
-    virtual metricq::awaitable<void> on_source_ready() = 0;
+    virtual Awaitable<void> on_source_config(const json& config) = 0;
+    virtual Awaitable<void> on_source_ready() = 0;
 
-    awaitable<void> declare_metrics();
+    Awaitable<void> declare_metrics();
     void clear_metrics();
 
 private:
-    awaitable<void> on_register_response(const json& response);
+    Awaitable<void> on_register_response(const json& response);
 
 private:
     std::string data_exchange_;

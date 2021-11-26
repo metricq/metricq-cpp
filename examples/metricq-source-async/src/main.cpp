@@ -94,9 +94,8 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        AsyncSource source(options.get("token"), interval, options.get("metric"),
-                           options.as<int>("messages-per-chunk"));
-        metricq::co_spawn(source.io_service, source.connect(options.get("server")));
+        AsyncSource source(options.get("server"), options.get("token"), interval,
+                           options.get("metric"), options.as<int>("messages-per-chunk"));
 
         Log::info() << "starting main loop.";
         source.main_loop();

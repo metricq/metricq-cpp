@@ -62,9 +62,9 @@ public:
     }
 
 protected:
-    awaitable<void> on_connected() override;
+    Awaitable<void> on_connected() override;
 
-    awaitable<void> on_data(const AMQP::Message& message, uint64_t delivery_tag,
+    Awaitable<void> on_data(const AMQP::Message& message, uint64_t delivery_tag,
                             bool redelivered) override;
 
 protected:

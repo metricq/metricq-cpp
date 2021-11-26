@@ -36,8 +36,8 @@ namespace metricq
 {
 Db::Db(const std::string& token) : Sink(token)
 {
-    register_rpc_callback("config", [this](const json& config) -> awaitable<json> {
-        auto subscribe_metrics = on_db_config(config);
+    register_rpc_callback("config", [this](const json& config) -> Awaitable<json> {
+        auto subscribe_metrics = co_await on_db_config(config);
         co_await this->subscribe(subscribe_metrics);
         co_return json::object();
     });
@@ -49,7 +49,7 @@ void Db::setup_history_queue(const AMQP::QueueCallback& callback)
     data_channel_->declareQueue(history_queue_, AMQP::passive).onSuccess(callback);
 }
 
-void Db::on_history(const AMQP::Message& incoming_message)
+Awaitable<void> Db::on_history(const AMQP::Message& incoming_message)
 {
     const auto& metric_name = incoming_message.routingkey();
     auto message_string = std::string(incoming_message.body(), incoming_message.bodySize());
@@ -59,7 +59,7 @@ void Db::on_history(const AMQP::Message& incoming_message)
 
     auto begin = Clock::now();
 
-    auto response = on_history(metric_name, history_request_);
+    auto response = co_await on_history(metric_name, history_request_);
 
     auto duration = Clock::now() - begin;
 
@@ -76,14 +76,14 @@ void Db::on_history(const AMQP::Message& incoming_message)
     data_channel_->publish("", incoming_message.replyTo(), envelope);
 }
 
-awaitable<void> Db::on_connected()
+Awaitable<void> Db::on_connected()
 {
     auto response = co_await rpc("db.register");
 
     co_await on_register_response(response);
 }
 
-awaitable<void> Db::on_register_response(const json& response)
+Awaitable<void> Db::on_register_response(const json& response)
 {
     log::debug("start parsing config");
 
@@ -91,7 +91,7 @@ awaitable<void> Db::on_register_response(const json& response)
 
     history_queue_ = response["historyQueue"].get<std::string>();
 
-    auto subscribe_metrics = on_db_config(response["config"].get<std::string>());
+    auto subscribe_metrics = co_await on_db_config(response["config"].get<std::string>());
     co_await db_subscribe(subscribe_metrics);
 
     setup_history_queue([this](const std::string& name, int message_count, int consumer_count) {
@@ -109,7 +109,7 @@ awaitable<void> Db::on_register_response(const json& response)
                                  bool redelivered) {
             (void)redelivered;
 
-            on_history(message);
+            co_spawn(io_service, on_history(message), *this);
             data_channel_->ack(deliveryTag);
         };
 
@@ -120,10 +120,10 @@ awaitable<void> Db::on_register_response(const json& response)
             .onFinalize([]() { log::info("sink history queue consume finalize"); });
     });
 
-    on_db_ready();
+    co_await on_db_ready();
 }
 
-awaitable<void> Db::db_subscribe(const json& metrics)
+Awaitable<void> Db::db_subscribe(const json& metrics)
 {
     // TODO reduce redundancy with Sink::subscribe
     auto payload = json{ { "metrics", metrics }, { "metadata", false } };

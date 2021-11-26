@@ -36,115 +36,280 @@
 #include <asio/awaitable.hpp>
 #include <asio/co_spawn.hpp>
 #include <asio/detached.hpp>
+#include <asio/experimental/awaitable_operators.hpp>
+#include <asio/experimental/promise.hpp>
 #include <asio/io_context.hpp>
 #include <asio/system_timer.hpp>
 #include <asio/use_awaitable.hpp>
 
 #include <future>
 #include <iostream>
+#include <optional>
 
 namespace metricq
 {
 template <typename T>
-using awaitable = asio::awaitable<T>;
-
-using use_awaitable_t = asio::use_awaitable_t<>;
+using Awaitable = asio::awaitable<T>;
 
 static auto use_awaitable = asio::use_awaitable;
 
 template <typename Executor, typename T>
-inline void co_spawn(Executor& e, awaitable<T> a)
+inline void co_spawn(Executor& e, Awaitable<T> a)
 {
     asio::co_spawn(e, std::move(a), asio::detached);
 }
 
-template <typename Connection>
-class CompletionHandler
+template <typename Executor, typename F>
+inline void co_spawn(Executor& e, F&& f)
 {
-public:
-    CompletionHandler(Connection& connection) : connection(connection)
-    {
-    }
-
-    void operator()(std::exception_ptr eptr)
-    {
-        try
-        {
-            if (eptr)
-            {
-                std::rethrow_exception(eptr);
-            }
-        }
-        catch (const std::exception& e)
-        {
-            connection.on_unhandled_exception(e);
-        }
-    }
-
-    template <typename T>
-    void operator()(std::exception_ptr eptr, T&&)
-    {
-        (*this)(eptr);
-    }
-
-private:
-    Connection& connection;
-};
-
-template <typename Executor, typename T, typename Connection>
-inline void co_spawn(Executor& e, awaitable<T> a, Connection& connection)
-{
-    asio::co_spawn(e, std::move(a), CompletionHandler<Connection>(connection));
+    asio::co_spawn(e, std::forward<F>(f), asio::detached);
 }
 
-[[nodiscard]] inline awaitable<void> wait_for(asio::io_context& ctx, Duration timeout)
+namespace detail
 {
-    asio::system_timer timer(ctx);
-    timer.expires_from_now(timeout);
-    co_await timer.async_wait(asio::use_awaitable);
+    template <typename ExceptionHandler>
+    class CompletionHandler
+    {
+    public:
+        CompletionHandler(ExceptionHandler& handler) : handler(handler)
+        {
+        }
+
+        void operator()(std::exception_ptr eptr)
+        {
+            try
+            {
+                if (eptr)
+                {
+                    std::rethrow_exception(eptr);
+                }
+            }
+            catch (const std::exception& e)
+            {
+                handler.on_unhandled_exception(e);
+            }
+        }
+
+        template <typename T>
+        void operator()(std::exception_ptr eptr, T&&)
+        {
+            (*this)(eptr);
+        }
+
+    private:
+        ExceptionHandler& handler;
+    };
+} // namespace detail
+
+template <typename Executor, typename T, typename ExceptionHandler>
+inline void co_spawn(Executor& e, Awaitable<T> a, ExceptionHandler& handler)
+{
+    asio::co_spawn(e, std::move(a), detail::CompletionHandler<ExceptionHandler>(handler));
+}
+
+template <typename Executor, typename F, typename ExceptionHandler>
+inline void co_spawn(Executor& e, F&& f, ExceptionHandler& handler)
+{
+    asio::co_spawn(e, std::forward<F>(f), detail::CompletionHandler<ExceptionHandler>(handler));
 }
 
 template <typename T>
-[[nodiscard]] awaitable<T> wait_for(asio::io_context& ctx, std::future<T>& fut, Duration timeout)
+class AsyncPromise;
+
+template <typename T>
+class AsyncFuture
 {
-    // At the moment of writing, asio doesn't provide its own future/promise types (or other
-    // coroutine primitives for that matter). Hence, we have to do it on our own.
-
-    // TODO: Make this implementation efficient. This will probably require you to understand
-    // ASIO implementation code, or wait for ASIO to support `co_await fut`
-
-    // Right now, this asynchronously polls using the asio timer. Hence, we don't leave
-    // the sacred asio lands.
-
-    // I tried to define my own coroutine, which would handle the awaiting of the future, but
-    // that went nowhere. The missing puzzle piece is how to "convert" a custom coroutine to
-    // something asio understands.
-
-    auto now = Clock::now();
-
-    auto status = fut.wait_for(Duration(0));
-
-    while (status != std::future_status::ready && Clock::now() - now < timeout)
+    AsyncFuture(asio::experimental::promise<void(std::optional<T>, std::exception_ptr)>& promise)
+    : promise_(promise)
     {
-        // this line is the important thing here! Using the asio::system_timer
-        // creates an interruption point here that allows the executor to
-        // progress other stuff, in particular, it progresses running network
-        // operations, which might soon finish the future.
-        co_await wait_for(ctx, std::chrono::milliseconds(10));
-        status = fut.wait_for(Duration(0));
     }
 
-    if (status == std::future_status::ready)
+public:
+    Awaitable<T> get()
     {
-        // The future is ready, so either it succeeded, or an exception was set.
-        co_return fut.get();
+        auto result = co_await promise_.async_wait(use_awaitable);
+
+        auto eptr = std::get<std::exception_ptr>(result);
+        auto value = std::get<std::optional<T>>(result);
+
+        if (eptr)
+        {
+            assert(!value.has_value());
+            std::rethrow_exception(eptr);
+        }
+
+        assert(value.has_value());
+
+        co_return value.value();
     }
-    else
+
+    Awaitable<T> get(Duration timeout)
     {
-        // Either we hit the timeout as defined with the parameter, or the future itself
-        // ran into a timeout. Whatever that means
-        throw TimeoutError("future timed out");
+        asio::system_timer timer(promise_.get_executor());
+        timer.expires_from_now(timeout);
+
+        using asio::experimental::awaitable_operators::operator||;
+
+        auto result = co_await(get() || timer.async_wait(use_awaitable));
+
+        timer.cancel();
+        promise_.cancel();
+
+        if (std::holds_alternative<T>(result))
+        {
+            co_return std::get<T>(result);
+        }
+        else
+        {
+            throw TimeoutError("Promise didn't finish within the timeout");
+        }
     }
+
+private:
+    friend class AsyncPromise<T>;
+
+    asio::experimental::promise<void(std::optional<T>, std::exception_ptr)>& promise_;
+};
+
+template <>
+class AsyncFuture<void>
+{
+    AsyncFuture(asio::experimental::promise<void(std::exception_ptr)>& promise) : promise_(promise)
+    {
+    }
+
+public:
+    Awaitable<void> get()
+    {
+        auto result = co_await promise_.async_wait(use_awaitable);
+
+        auto eptr = std::get<std::exception_ptr>(result);
+
+        if (eptr)
+        {
+            std::rethrow_exception(eptr);
+        }
+    }
+
+    Awaitable<void> get(Duration timeout)
+    {
+        asio::system_timer timer(promise_.get_executor());
+        timer.expires_from_now(timeout);
+
+        using asio::experimental::awaitable_operators::operator||;
+
+        auto result = co_await(get() || timer.async_wait(use_awaitable));
+
+        timer.cancel();
+        promise_.cancel();
+
+        if (std::holds_alternative<std::monostate>(result))
+        {
+            co_return;
+        }
+        else
+        {
+            throw TimeoutError("Promise didn't finish within the timeout");
+        }
+    }
+
+private:
+    friend class AsyncPromise<void>;
+
+    asio::experimental::promise<void(std::exception_ptr)>& promise_;
+};
+
+template <typename T>
+class AsyncPromise
+{
+public:
+    AsyncPromise(asio::io_context& io_context)
+    : handler_(io_context.get_executor()), promise_(handler_.make_promise())
+    {
+    }
+
+    void set_exception(std::exception_ptr eptr)
+    {
+        handler_({}, eptr);
+    }
+
+    void set_value(T&& value)
+    {
+        handler_(std::move(value), {});
+    }
+
+    void set_value(const T& value)
+    {
+        handler_(value, {});
+    }
+
+    AsyncFuture<T> get_future()
+    {
+        return { promise_ };
+    }
+
+    void cancel()
+    {
+        promise_.cancel();
+    }
+
+private:
+    using AsioPromiseHandler =
+        asio::experimental::detail::promise_handler<void(std::optional<T>, std::exception_ptr)>;
+
+    AsioPromiseHandler handler_;
+    asio::experimental::promise<void(std::optional<T>, std::exception_ptr)> promise_;
+};
+
+template <>
+class AsyncPromise<void>
+{
+public:
+    AsyncPromise(asio::io_context& io_context)
+    : handler_(io_context.get_executor()), promise_(handler_.make_promise())
+    {
+    }
+
+    void set_exception(std::exception_ptr eptr)
+    {
+        handler_(eptr);
+    }
+
+    void set_done()
+    {
+        handler_({});
+    }
+
+    AsyncFuture<void> get_future()
+    {
+        return { promise_ };
+    }
+
+    void cancel()
+    {
+        promise_.cancel();
+    }
+
+private:
+    using AsioPromiseHandler =
+        asio::experimental::detail::promise_handler<void(std::exception_ptr)>;
+
+    AsioPromiseHandler handler_;
+    asio::experimental::promise<void(std::exception_ptr)> promise_;
+};
+
+[[nodiscard]] inline Awaitable<void> wait_until(TimePoint timeout)
+{
+    asio::system_timer timer(co_await asio::this_coro::executor);
+    timer.expires_at(timeout);
+    co_await timer.async_wait(asio::use_awaitable);
+}
+
+[[nodiscard]] inline Awaitable<void> wait_for(Duration timeout)
+{
+    asio::system_timer timer(co_await asio::this_coro::executor);
+    timer.expires_from_now(timeout);
+    co_await timer.async_wait(asio::use_awaitable);
 }
 
 } // namespace metricq

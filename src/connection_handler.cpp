@@ -41,6 +41,8 @@ namespace metricq
 
 void QueuedBuffer::emplace(const char* ptr, std::size_t size)
 {
+    log::trace("Added new buffer ({:x}) of size {}.", *reinterpret_cast<std::size_t*>(&ptr), size);
+
     // check if this fits at the back of the last queued buffer
     buffers_.emplace(ptr, ptr + size);
 }
@@ -51,19 +53,22 @@ void QueuedBuffer::consume(std::size_t consumed_bytes)
 
     if (buffers_.front().size() == offset_ + consumed_bytes)
     {
+        log::trace("Current buffer is empty, poping it of.");
         offset_ = 0;
         buffers_.pop();
     }
     else
     {
         offset_ += consumed_bytes;
+        log::trace("Current buffer isn't empty yet, remaining: {}",
+                   buffers_.front().size() - offset_);
     }
 }
 
 AsioConnectionHandler::AsioConnectionHandler(asio::io_service& io_service, const std::string& name,
                                              const std::string& token)
-: heartbeat_timer_(io_service), heartbeat_interval_(std::chrono::seconds(0)), resolver_(io_service),
-  name_(name), token_(token)
+: io_context_(io_service), heartbeat_timer_(io_service),
+  heartbeat_interval_(std::chrono::seconds(0)), resolver_(io_service), name_(name), token_(token)
 {
 }
 
@@ -89,7 +94,7 @@ SSLConnectionHandler::SSLConnectionHandler(asio::io_service& io_service, const s
                              asio::ssl::context::tlsv12_client);
 }
 
-awaitable<void> AsioConnectionHandler::connect(const AMQP::Address& address)
+Awaitable<void> AsioConnectionHandler::connect(const AMQP::Address& address)
 {
     assert(!underlying_socket().is_open());
     assert(!connection_);
@@ -98,49 +103,56 @@ awaitable<void> AsioConnectionHandler::connect(const AMQP::Address& address)
     connection_ = std::make_unique<AMQP::Connection>(this, address.login(), address.vhost());
 
     asio::ip::tcp::resolver::query query(address.hostname(), std::to_string(address.port()));
-    auto endpoint_iterator = co_await resolver_.async_resolve(query, asio::use_awaitable);
+    asio::ip::tcp::resolver::results_type endpoint_iterator;
 
-    // TODO what about error handling?
-    //    if (error)
-    //    {
-    //        log::error("[{}] failed to resolve hostname {}: {}", name_, address.hostname(),
-    //                   error.message());
-    //        this->onError("resolve failed");
-    //        return;
-    //    }
+    try
+    {
+        endpoint_iterator = co_await resolver_.async_resolve(query, use_awaitable);
+    }
+    catch (std::exception& e)
+    {
+        log::error("[{}] failed to resolve hostname {}: {}", name_, address.hostname(), e.what());
+        this->onError("resolve failed");
+        co_return;
+    }
 
     for (auto it = endpoint_iterator; it != decltype(endpoint_iterator)(); ++it)
     {
         log::debug("[{}] resolved {} to {}", name_, address.hostname(), it->endpoint());
     }
 
-    auto successful_endpoint =
-        co_await asio::async_connect(this->underlying_socket(), endpoint_iterator,
-                                     decltype(endpoint_iterator)(), asio::use_awaitable);
-    // TODO error handling?
-    //                        [this](const auto& error, auto successful_endpoint) {
-    //                            if (error)
-    //                            {
-    //                                log::error("[{}] Failed to connect to: {}", name_,
-    //                                error.message()); this->onError("Connect failed"); return;
-    //                            }
-    //                        });
+    try
+    {
+        auto successful_endpoint =
+            co_await asio::async_connect(this->underlying_socket(), endpoint_iterator,
+                                         decltype(endpoint_iterator)(), use_awaitable);
 
-    log::debug("[{}] Established connection to {} at {}", name_, successful_endpoint->host_name(),
-               successful_endpoint->endpoint());
+        log::debug("[{}] Established connection to {} at {}", name_,
+                   successful_endpoint->host_name(), successful_endpoint->endpoint());
 
-    this->handshake(successful_endpoint->host_name());
+        co_await this->handshake(successful_endpoint->host_name());
+    }
+    catch (std::exception& e)
+    {
+        log::error("[{}] Failed to connect to: {}", name_, e.what());
+        this->onError("Connect failed");
+        co_return;
+    }
 }
 
-void PlainConnectionHandler::handshake(const std::string& hostname)
+metricq::Awaitable<void> PlainConnectionHandler::handshake(const std::string& hostname)
 {
     (void)hostname;
 
-    this->read();
+    using asio::experimental::awaitable_operators::operator||;
+
     this->flush();
+    this->read();
+
+    co_return;
 }
 
-void SSLConnectionHandler::handshake(const std::string& hostname)
+metricq::Awaitable<void> SSLConnectionHandler::handshake(const std::string& hostname)
 {
 #ifdef METRICQ_SSL_SKIP_VERIFY
     // Building without SSL verification; DO NOT USE THIS IN PRODUCTION!
@@ -160,19 +172,23 @@ void SSLConnectionHandler::handshake(const std::string& hostname)
     socket_.set_verify_callback(asio::ssl::rfc2818_verification(hostname));
 #endif
 
-    socket_.async_handshake(asio::ssl::stream_base::client, [this](const auto& error) {
-        if (error)
-        {
-            log::error("[{}] Failed to SSL handshake to: {}", name_, error.message());
-            this->onError("SSL handshake failed");
-            return;
-        }
+    try
+    {
+        co_await socket_.async_handshake(asio::ssl::stream_base::client, use_awaitable);
+    }
+    catch (std::exception& e)
+    {
+        log::error("[{}] Failed to SSL handshake to: {}", name_, e.what());
+        this->onError("SSL handshake failed");
+        co_return;
+    }
 
-        log::debug("[{}] SSL handshake was successful.", name_);
+    log::debug("[{}] SSL handshake was successful.", name_);
 
-        this->read();
-        this->flush();
-    });
+    using asio::experimental::awaitable_operators::operator||;
+
+    this->flush();
+    this->read();
 }
 
 uint16_t AsioConnectionHandler::onNegotiate(AMQP::Connection* connection, uint16_t timeout)
@@ -185,10 +201,10 @@ uint16_t AsioConnectionHandler::onNegotiate(AMQP::Connection* connection, uint16
     // and we should send a heartbeat every timeout/2. I guess this is an issue in AMQP-CPP
     heartbeat_interval_ = std::chrono::seconds(timeout / 2);
 
-    // We don't need to setup the heartbeat timer here. The library will report back our returned
-    // timeout value to the server, which inevitable will trigger a send operation, which will
-    // setup the heartbeat timer once it was completed. So we could setup the timer here, but it
-    // would be canceled anyway.
+    // We don't need to setup the heartbeat timer here. The library will report back our
+    // returned timeout value to the server, which inevitable will trigger a send operation,
+    // which will setup the heartbeat timer once it was completed. So we could setup the timer
+    // here, but it would be canceled anyway.
 
     return timeout;
 }
@@ -237,6 +253,11 @@ void AsioConnectionHandler::onReady(AMQP::Connection* connection)
     log::debug("[{}] ConnectionHandler::onReady", name_);
 }
 
+void AsioConnectionHandler::on_unhandled_exception(const std::exception& e)
+{
+    onError(e.what());
+}
+
 /**
  *  Method that is called by the AMQP library when a fatal error occurs
  *  on the connection, for example because data received from RabbitMQ
@@ -260,13 +281,14 @@ void AsioConnectionHandler::onError(AMQP::Connection* connection, const char* me
 
     // TODO actually implement reconnect
     /* NOTE to the poor soul, who will implement a robust connection:
-     * Please be aware that there exists the possible situation that a close is requested, but after
-     * that someone tries to still send a message over the soon to be closed connection (Think of
-     * a async handler on another thread or some shit like that). This means that in the onClosed()
-     * member function, there wil be the situation that send_buffers_ aren't empty. As the send task
-     * is asynchronously dispatched, I can't do shit about it. But because the socket will be closed
-     * the flush handler will error out and thus is going to come here. In the end, you could
-     * trigger a reconnect AFTER the connection was asked to close itself! *Wierd* இ௰இ)
+     * Please be aware that there exists the possible situation that a close is requested, but
+     * after that someone tries to still send a message over the soon to be closed connection
+     * (Think of a async handler on another thread or some shit like that). This means that in
+     * the onClosed() member function, there wil be the situation that send_buffers_ aren't
+     * empty. As the send task is asynchronously dispatched, I can't do shit about it. But
+     * because the socket will be closed the flush handler will error out and thus is going to
+     * come here. In the end, you could trigger a reconnect AFTER the connection was asked to
+     * close itself! *Wierd* இ௰இ)
      *
      * ps: My condolences that you ended up implementing this.
      */
@@ -310,17 +332,20 @@ void AsioConnectionHandler::onClosed(AMQP::Connection* connection)
     // cancel the heartbeat timer
     heartbeat_timer_.cancel();
 
+    // we co_spawned the read as its own thread of execution. Time to shoot it.
+
     // check if send_buffers are empty, this would be strange, because that means that AMQP-CPP
     // tried to sent something, after it sent the close frame.
     if (!send_buffers_.empty())
     {
-        // Coming here means, we still have dispatched tasks somewhere, which will soon try to write
-        // something on the socket. However, that socket was closed from us a few lines above.
+        // Coming here means, we still have dispatched tasks somewhere, which will soon try to
+        // write something on the socket. However, that socket was closed from us a few lines
+        // above.
 
-        // we can't clear that buffer now, someone else will try to send it over the closed socket.
-        // (With someone else I mean future-me). But this will end up in the error handler, which
-        // will throw. Good luck with that. Better try not to create this situation in the first
-        // place
+        // we can't clear that buffer now, someone else will try to send it over the closed
+        // socket. (With someone else I mean future-me). But this will end up in the error
+        // handler, which will throw. Good luck with that. Better try not to create this
+        // situation in the first place
 
         // I can't do shit here:
         log::warn("[{}] During the close of the connection, there is still data to send in the "
@@ -328,8 +353,8 @@ void AsioConnectionHandler::onClosed(AMQP::Connection* connection)
                   name_);
     }
 
-    // this technically invalidates all existing channel objects. Those objects are the hard part
-    // for a robust connection
+    // this technically invalidates all existing channel objects. Those objects are the hard
+    // part for a robust connection
     connection_.reset();
 
     if (close_callback_)
@@ -344,54 +369,62 @@ bool AsioConnectionHandler::close()
     {
         return false;
     }
-    connection_->close();
-    return true;
+    return connection_->close();
 }
 
 void AsioConnectionHandler::read()
 {
-    this->async_read_some([this](const auto& error, auto received_bytes) {
-        if (error)
+    co_spawn(io_context_, do_read(), *this);
+}
+
+Awaitable<void> AsioConnectionHandler::do_read()
+{
+    while (this->underlying_socket().is_open())
+    {
+        try
         {
-            log::error("[{}] read failed: {}", name_, error.message());
+            assert(this->connection_);
+
+            auto received_bytes = co_await this->async_read_some();
+
+            log::trace(
+                "[{}] Successfully received {} bytes through the socket. Waiting for at least "
+                "{} bytes.",
+                name_, received_bytes, connection_->expected());
+
+            this->recv_buffer_.commit(received_bytes);
+
+            if (this->recv_buffer_.size() >= connection_->expected())
+            {
+                auto bufs = this->recv_buffer_.data();
+                auto i = bufs.begin();
+                auto buf(*i);
+
+                // This should not happen™
+                assert(i + 1 == bufs.end());
+
+                auto begin = asio::buffer_cast<const char*>(buf);
+                auto size = asio::buffer_size(buf);
+
+                auto consumed = connection_->parse(begin, size);
+                this->recv_buffer_.consume(consumed);
+
+                log::trace("[{}] Consumed {} of {} bytes.", name_, consumed, received_bytes);
+            }
+        }
+        catch (std::exception& e)
+        {
+            log::error("[{}] read failed: {}", name_, e.what());
             if (this->connection_)
             {
-                this->connection_->fail(error.message().c_str());
+                this->connection_->fail(e.what());
             }
             this->onError("read failed");
-            return;
+            co_return;
         }
+    }
 
-        log::trace("[{}] Successfully received {} bytes through the socket. Waiting for at least "
-                   "{} bytes.",
-                   name_, received_bytes, connection_->expected());
-
-        assert(this->connection_);
-        this->recv_buffer_.commit(received_bytes);
-
-        if (this->recv_buffer_.size() >= connection_->expected())
-        {
-            auto bufs = this->recv_buffer_.data();
-            auto i = bufs.begin();
-            auto buf(*i);
-
-            // This should not happen™
-            assert(i + 1 == bufs.end());
-
-            auto begin = asio::buffer_cast<const char*>(buf);
-            auto size = asio::buffer_size(buf);
-
-            auto consumed = connection_->parse(begin, size);
-            this->recv_buffer_.consume(consumed);
-
-            log::trace("[{}] Consumed {} of {} bytes.", name_, consumed, received_bytes);
-        }
-
-        if (this->underlying_socket().is_open())
-        {
-            this->read();
-        }
-    });
+    log::trace("[{}] Stopped listening for incoming data", name_);
 }
 
 void AsioConnectionHandler::flush()
@@ -403,17 +436,17 @@ void AsioConnectionHandler::flush()
 
     flush_in_progress_ = true;
 
-    this->async_write_some([this](const auto& error, auto transferred) {
-        if (error)
-        {
-            log::error("[{}] write failed: {}", name_, error.message());
-            if (this->connection_)
-            {
-                this->connection_->fail(error.message().c_str());
-            }
-            this->onError("write failed");
-            return;
-        }
+    co_spawn(io_context_, do_flush(), *this);
+}
+
+Awaitable<void> AsioConnectionHandler::do_flush()
+{
+    if (send_buffers_.empty())
+        co_return;
+
+    try
+    {
+        auto transferred = co_await this->async_write_some();
 
         log::trace("[{}] Completed to send {} bytes through the socket", name_, transferred);
 
@@ -430,29 +463,46 @@ void AsioConnectionHandler::flush()
 
         this->flush_in_progress_ = false;
         this->flush();
-    });
+    }
+    catch (std::exception& e)
+    {
+        log::error("[{}] write failed: {}", name_, e.what());
+        if (this->connection_)
+        {
+            this->connection_->fail(e.what());
+        }
+        this->onError("write failed");
+    }
 }
 
-void PlainConnectionHandler::async_write_some(std::function<void(std::error_code, std::size_t)> cb)
+Awaitable<std::size_t> PlainConnectionHandler::async_write_some()
 {
-    socket_.async_write_some(send_buffers_.front(), cb);
+    assert(!send_buffers_.empty());
+    co_return co_await socket_.async_write_some(send_buffers_.front(), use_awaitable);
 }
 
-void PlainConnectionHandler::async_read_some(std::function<void(std::error_code, std::size_t)> cb)
+Awaitable<std::size_t> PlainConnectionHandler::async_read_some()
 {
     assert(this->connection_);
-    socket_.async_read_some(asio::buffer(recv_buffer_.prepare(connection_->maxFrame() * 32)), cb);
+    auto bytes_read = co_await socket_.async_read_some(
+        asio::buffer(recv_buffer_.prepare(connection_->maxFrame() * 32)), use_awaitable);
+
+    co_return bytes_read;
 }
 
-void SSLConnectionHandler::async_write_some(std::function<void(std::error_code, std::size_t)> cb)
+Awaitable<std::size_t> SSLConnectionHandler::async_write_some()
 {
-    socket_.async_write_some(send_buffers_.front(), cb);
+    assert(!send_buffers_.empty());
+    co_return co_await socket_.async_write_some(send_buffers_.front(), use_awaitable);
 }
 
-void SSLConnectionHandler::async_read_some(std::function<void(std::error_code, std::size_t)> cb)
+Awaitable<std::size_t> SSLConnectionHandler::async_read_some()
 {
     assert(this->connection_);
-    socket_.async_read_some(asio::buffer(recv_buffer_.prepare(connection_->maxFrame() * 32)), cb);
+    auto bytes_read = co_await socket_.async_read_some(
+        asio::buffer(recv_buffer_.prepare(connection_->maxFrame() * 32)), use_awaitable);
+
+    co_return bytes_read;
 }
 
 void AsioConnectionHandler::beat(const asio::error_code& error)
@@ -486,8 +536,8 @@ void AsioConnectionHandler::beat(const asio::error_code& error)
         this->heartbeat_timer_.async_wait([this](const auto& error) { this->beat(error); });
     }
 
-    // We don't need to setup the timer again, this will be done by the flush() handler triggerd by
-    // the heartbeat() call itself
+    // We don't need to setup the timer again, this will be done by the flush() handler triggerd
+    // by the heartbeat() call itself
 }
 
 std::unique_ptr<AMQP::Channel> AsioConnectionHandler::make_channel()

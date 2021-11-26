@@ -50,7 +50,7 @@ Sink::~Sink()
 {
 }
 
-awaitable<void> Sink::subscribe(const std::vector<std::string>& metrics)
+Awaitable<void> Sink::subscribe(const std::vector<std::string>& metrics)
 {
     auto payload = json{ { "metrics", metrics }, { "metadata", true } };
     auto response = co_await rpc("sink.subscribe", payload);
@@ -63,7 +63,7 @@ awaitable<void> Sink::subscribe(const std::vector<std::string>& metrics)
     }
 }
 
-awaitable<void> Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
+Awaitable<void> Sink::subscribe(const std::vector<std::string>& metrics, Duration expires)
 {
     if (expires.count() <= 0)
     {
@@ -95,7 +95,7 @@ awaitable<void> Sink::subscribe(const std::vector<std::string>& metrics, Duratio
     }
 }
 
-awaitable<void> Sink::sink_config(const json& config)
+Awaitable<void> Sink::sink_config(const json& config)
 {
     co_await data_config(config);
 
@@ -167,7 +167,7 @@ void Sink::update_metadata(const json& config)
     }
 }
 
-awaitable<void> Sink::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
+Awaitable<void> Sink::on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
 {
     (void)redelivered;
     const auto& metric_name = message.routingkey();
@@ -186,7 +186,7 @@ awaitable<void> Sink::on_data(const AMQP::Message& message, uint64_t delivery_ta
     }
 }
 
-awaitable<void> Sink::on_data(const std::string& id, const DataChunk& data_chunk)
+Awaitable<void> Sink::on_data(const std::string& id, const DataChunk& data_chunk)
 {
     for (auto tv : data_chunk)
     {
@@ -194,7 +194,7 @@ awaitable<void> Sink::on_data(const std::string& id, const DataChunk& data_chunk
     }
 }
 
-awaitable<void> Sink::on_data(const std::string&, TimeValue)
+Awaitable<void> Sink::on_data(const std::string&, TimeValue)
 {
     log::fatal("unhandled TimeValue data, implementation error.");
     std::abort();

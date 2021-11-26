@@ -116,7 +116,9 @@ target_compile_definitions(asio
         ASIO_STANDALONE
         ASIO_HAS_STD_COROUTINE
         ASIO_HAS_CO_AWAIT
-        # ASIO_ENABLE_HANDLER_TRACKING
+        # ASIO_HAS_IO_URING
+        # ASIO_DISABLE_EPOLL
+        ASIO_ENABLE_HANDLER_TRACKING
 )
 
 add_library(asio::asio ALIAS asio)

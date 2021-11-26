@@ -46,6 +46,12 @@ public:
     using Exception::Exception;
 };
 
+class ConnectionClosedError : public ConnectionError
+{
+public:
+    using ConnectionError::ConnectionError;
+};
+
 class TimeoutError : public Exception
 {
 public:

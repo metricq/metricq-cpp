@@ -37,14 +37,14 @@ namespace metricq
 {
 Transformer::Transformer(const std::string& token) : Sink(token)
 {
-    register_rpc_callback("config", [this](const json& config) -> awaitable<json> {
+    register_rpc_callback("config", [this](const json& config) -> Awaitable<json> {
         this->on_transformer_config(config);
         co_await this->subscribe_metrics();
         co_return json::object();
     });
 }
 
-awaitable<void> Transformer::on_connected()
+Awaitable<void> Transformer::on_connected()
 {
     auto response = co_await rpc("transformer.register");
 
@@ -62,7 +62,7 @@ void Transformer::send(const std::string& id, TimeValue tv)
     data_channel_->publish(data_exchange_, id, DataChunk(tv).SerializeAsString());
 }
 
-awaitable<void> Transformer::subscribe_metrics()
+Awaitable<void> Transformer::subscribe_metrics()
 {
     if (input_metrics.empty())
     {
@@ -81,7 +81,7 @@ awaitable<void> Transformer::subscribe_metrics()
     co_await declare_metrics();
 }
 
-awaitable<void> Transformer::on_register_response(const json& response)
+Awaitable<void> Transformer::on_register_response(const json& response)
 {
     assert(this->data_exchange_.empty());
 
@@ -92,7 +92,7 @@ awaitable<void> Transformer::on_register_response(const json& response)
     co_await subscribe_metrics();
 }
 
-awaitable<void> Transformer::declare_metrics()
+Awaitable<void> Transformer::declare_metrics()
 {
     if (output_metrics_.empty())
     {

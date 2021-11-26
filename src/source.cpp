@@ -47,14 +47,14 @@ namespace metricq
 
 Source::Source(const std::string& token) : DataClient(token)
 {
-    register_rpc_callback("config", [this](const json& config) -> awaitable<json> {
+    register_rpc_callback("config", [this](const json& config) -> Awaitable<json> {
         co_await on_source_config(config);
         co_await declare_metrics();
         co_return json::object();
     });
 }
 
-awaitable<void> Source::on_connected()
+Awaitable<void> Source::on_connected()
 {
     auto response = co_await rpc("source.register");
     co_await on_register_response(response);
@@ -71,7 +71,7 @@ void Source::send(const std::string& id, TimeValue tv)
     data_channel_->publish(data_exchange_, id, DataChunk(tv).SerializeAsString());
 }
 
-awaitable<void> Source::on_register_response(const json& response)
+Awaitable<void> Source::on_register_response(const json& response)
 {
     co_await data_config(response);
 
@@ -83,13 +83,13 @@ awaitable<void> Source::on_register_response(const json& response)
     co_await on_source_config(response.at("config"));
 }
 
-awaitable<void> Source::on_data_channel_ready()
+Awaitable<void> Source::on_data_channel_ready()
 {
     co_await on_source_ready();
     co_await declare_metrics();
 }
 
-awaitable<void> Source::declare_metrics()
+Awaitable<void> Source::declare_metrics()
 {
     if (metrics_.empty())
     {

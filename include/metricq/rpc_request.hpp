@@ -53,7 +53,7 @@ public:
     }
 
 protected:
-    awaitable<void> on_connected() override
+    Awaitable<void> on_connected() override
     {
         response_ = co_await rpc(function_, payload_);
 

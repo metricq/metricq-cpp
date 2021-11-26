@@ -44,21 +44,22 @@ public:
     Db(const std::string& token);
 
 protected:
-    virtual HistoryResponse on_history(const std::string& id, const HistoryRequest& content) = 0;
+    virtual Awaitable<HistoryResponse> on_history(const std::string& id,
+                                                  const HistoryRequest& content) = 0;
     // returns the metrics to subscribe to
-    virtual json on_db_config(const json& config) = 0;
-    virtual void on_db_ready() = 0;
+    virtual Awaitable<json> on_db_config(const json& config) = 0;
+    virtual Awaitable<void> on_db_ready() = 0;
 
 private:
-    void on_history(const AMQP::Message&);
+    Awaitable<void> on_history(const AMQP::Message&);
     void setup_history_queue(const AMQP::QueueCallback& callback);
-    awaitable<void> on_register_response(const json& response);
+    Awaitable<void> on_register_response(const json& response);
     // We keep this private to avoid confusion because this is done automatically through return of
     // on_db_config
-    awaitable<void> db_subscribe(const json& metrics);
+    Awaitable<void> db_subscribe(const json& metrics);
 
 protected:
-    awaitable<void> on_connected() override;
+    Awaitable<void> on_connected() override;
 
 protected:
     std::string history_queue_;

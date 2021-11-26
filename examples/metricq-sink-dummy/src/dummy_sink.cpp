@@ -53,8 +53,22 @@ DummySink::DummySink(const std::string& manager_host, const std::string& token,
             return;
         }
         Log::info() << "Caught signal " << signal << ". Shutdown.";
-        auto payload = metricq::json{ { "dataQueue", data_queue() }, { "metrics", metrics_ } };
-        metricq::co_spawn(this->io_service, rpc("sink.unsubscribe", payload), *this);
+        metricq::co_spawn(
+            this->io_service,
+            [this]() -> metricq::Awaitable<void> {
+                auto payload =
+                    metricq::json{ { "dataQueue", data_queue() }, { "metrics", metrics_ } };
+                try
+                {
+                    co_await rpc("sink.unsubscribe", payload);
+                }
+                catch (std::exception& e)
+                {
+                    Log::info() << "unsubscribe rpc failed: " << e.what();
+                }
+                Log::info() << "Finished unsubscribe rpc";
+            },
+            *this);
         timer_.cancel();
         timeout_timer_.cancel();
     });
@@ -62,7 +76,7 @@ DummySink::DummySink(const std::string& manager_host, const std::string& token,
     metricq::co_spawn(io_service, connect(manager_host), *this);
 }
 
-metricq::awaitable<void> DummySink::on_connected()
+metricq::Awaitable<void> DummySink::on_connected()
 {
     co_await subscribe(metrics_);
     start_time_ = metricq::Clock::now();
@@ -70,7 +84,7 @@ metricq::awaitable<void> DummySink::on_connected()
     co_return;
 }
 
-metricq::awaitable<void> DummySink::on_data_channel_ready()
+metricq::Awaitable<void> DummySink::on_data_channel_ready()
 {
     Log::info() << "DummySink data channel is ready! Metric metadata:";
     for (const auto& elem : metadata_)
@@ -135,7 +149,7 @@ void DummySink::on_closed()
     timeout_timer_.cancel();
 }
 
-metricq::awaitable<void> DummySink::on_data(const AMQP::Message& message, uint64_t delivery_tag,
+metricq::Awaitable<void> DummySink::on_data(const AMQP::Message& message, uint64_t delivery_tag,
                                             bool redelivered)
 {
     if (message.typeName() == "end")
@@ -144,7 +158,9 @@ metricq::awaitable<void> DummySink::on_data(const AMQP::Message& message, uint64
         Log::debug() << "received end message";
 
         auto payload = metricq::json{ { "dataQueue", data_queue() } };
-        co_await rpc("sink.release", payload);
+        auto response = co_await rpc("sink.release", payload);
+
+        Log::debug() << "Response: " << response;
 
         close();
 
@@ -165,9 +181,9 @@ metricq::awaitable<void> DummySink::on_data(const AMQP::Message& message, uint64
     }
 }
 
-metricq::awaitable<void> DummySink::on_data(const std::string& name, metricq::TimeValue tv)
+metricq::Awaitable<void> DummySink::on_data(const std::string& name, metricq::TimeValue tv)
 {
-    Log::debug() << "Received data for metric " << name << ": " << tv;
+    // Log::debug() << "Received data for metric " << name << ": " << tv;
     message_count_++;
 
     co_return;

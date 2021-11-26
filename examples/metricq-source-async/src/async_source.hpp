@@ -38,18 +38,18 @@
 class AsyncSource : public metricq::Source
 {
 public:
-    AsyncSource(const std::string& token, metricq::Duration interval, const std::string& metric,
-                int messages_per_chunk);
+    AsyncSource(const std::string& server, const std::string& token, metricq::Duration interval,
+                const std::string& metric, int messages_per_chunk);
     ~AsyncSource();
 
     void on_error(const std::string& message) override;
     void on_closed() override;
 
 private:
-    metricq::awaitable<void> on_source_config(const metricq::json& config) override;
-    metricq::awaitable<void> on_source_ready() override;
+    metricq::Awaitable<void> on_source_config(const metricq::json& config) override;
+    metricq::Awaitable<void> on_source_ready() override;
 
-    metricq::awaitable<void> task();
+    metricq::Awaitable<void> task();
 
     asio::signal_set signals_;
 

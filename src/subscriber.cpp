@@ -45,7 +45,7 @@ void Subscriber::add(const std::string& metric)
     metrics_.emplace_back(metric);
 }
 
-awaitable<void> Subscriber::on_connected()
+Awaitable<void> Subscriber::on_connected()
 {
     auto payload =
         json{ { "metrics", metrics_ },

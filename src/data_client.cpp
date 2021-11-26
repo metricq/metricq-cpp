@@ -42,14 +42,14 @@ namespace metricq
 {
 DataClient::DataClient(const std::string& token, bool add_uuid) : Connection(token, add_uuid)
 {
-    register_rpc_callback("discover", [this](auto& request) -> awaitable<json> {
+    register_rpc_callback("discover", [this](auto& request) -> Awaitable<json> {
         co_return handle_discover_rpc(request);
     });
 }
 
 DataClient::~DataClient() = default;
 
-awaitable<void> DataClient::data_config(const metricq::json& config)
+Awaitable<void> DataClient::data_config(const metricq::json& config)
 {
     AMQP::Address new_data_server_address =
         derive_address(config["dataServerAddress"].get<std::string>());
@@ -71,7 +71,7 @@ awaitable<void> DataClient::data_config(const metricq::json& config)
     co_await open_data_connection();
 }
 
-awaitable<void> DataClient::open_data_connection()
+Awaitable<void> DataClient::open_data_connection()
 {
     log::debug("opening data connection to {}", redact_address_login(*data_server_address_));
     if (data_server_address_->secure())
@@ -95,25 +95,25 @@ awaitable<void> DataClient::open_data_connection()
     data_channel_->onError(debug_error_cb("data channel error"));
 }
 
-void DataClient::close()
+Awaitable<void> DataClient::close()
 {
     // Close data connection first, then close the management connection
     if (!data_connection_)
     {
         log::debug("closing DataClient, no data_connection up yet");
-        Connection::close();
-        return;
+        co_await Connection::close();
+        co_return;
     }
 
     // don't let the data_connection::close() call the on_closed() of this class, the close of the
     // management connection shall call on_closed().
     data_connection_->close([this]() {
         log::info("closed data_connection");
-        Connection::close();
+        co_spawn(io_service, Connection::close(), *this);
     });
 }
 
-awaitable<void> DataClient::on_data_channel_ready()
+Awaitable<void> DataClient::on_data_channel_ready()
 {
     co_return;
 }

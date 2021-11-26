@@ -64,14 +64,14 @@ DummySource::DummySource(const std::string& manager_host, const std::string& tok
         }
     });
 
-    metricq::co_spawn(io_service, connect(manager_host));
+    metricq::co_spawn(io_service, connect(manager_host), *this);
 }
 
 DummySource::~DummySource()
 {
 }
 
-metricq::awaitable<void> DummySource::on_source_config(const metricq::json&)
+metricq::Awaitable<void> DummySource::on_source_config(const metricq::json&)
 {
     Log::debug() << "DummySource::on_source_config() called";
     (*this)[metric_];
@@ -79,7 +79,7 @@ metricq::awaitable<void> DummySource::on_source_config(const metricq::json&)
     co_return;
 }
 
-metricq::awaitable<void> DummySource::on_source_ready()
+metricq::Awaitable<void> DummySource::on_source_ready()
 {
     Log::debug() << "DummySource::on_source_ready() called";
     (*this)[metric_].metadata.unit("kittens");
@@ -90,6 +90,8 @@ metricq::awaitable<void> DummySource::on_source_ready()
     timer_.start([this](auto err) { return this->timeout_cb(err); }, interval);
 
     running_ = true;
+
+    co_return;
 }
 
 void DummySource::on_error(const std::string& message)

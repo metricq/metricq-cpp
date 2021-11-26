@@ -91,7 +91,7 @@ void DummyTransformer::on_transformer_ready()
     Log::info() << "DummyTransformer ready";
 }
 
-metricq::awaitable<void> DummyTransformer::on_data(const std::string& id, metricq::TimeValue tv)
+metricq::Awaitable<void> DummyTransformer::on_data(const std::string& id, metricq::TimeValue tv)
 {
     try
     {

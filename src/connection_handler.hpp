@@ -179,7 +179,7 @@ public:
 public:
     // void connect(const AMQP::Address& address);
 
-    awaitable<void> connect(const AMQP::Address& address);
+    Awaitable<void> connect(const AMQP::Address& address);
 
     bool close(std::function<void()> callback)
     {
@@ -201,20 +201,25 @@ public:
         error_callback_ = std::move(callback);
     }
 
+    void on_unhandled_exception(const std::exception& e);
+
 protected:
     void connect(asio::ip::tcp::resolver::iterator endpoint_iterator);
     void read();
+    Awaitable<void> do_read();
     void flush();
+    Awaitable<void> do_flush();
     void beat(const asio::error_code&);
 
 protected:
-    virtual void handshake(const std::string& hostname) = 0;
+    virtual Awaitable<void> handshake(const std::string& hostname) = 0;
     virtual asio::basic_socket<asio::ip::tcp>& underlying_socket() = 0;
 
-    virtual void async_write_some(std::function<void(std::error_code, std::size_t)> callback) = 0;
-    virtual void async_read_some(std::function<void(std::error_code, std::size_t)> callback) = 0;
+    virtual Awaitable<std::size_t> async_write_some() = 0;
+    virtual Awaitable<std::size_t> async_read_some() = 0;
 
 protected:
+    asio::io_context& io_context_;
     std::function<void(const std::string&)> error_callback_;
     std::function<void()> close_callback_;
     std::unique_ptr<AMQP::Connection> connection_;
@@ -249,10 +254,10 @@ public:
     }
 
 protected:
-    void async_write_some(std::function<void(std::error_code, std::size_t)> callback) override;
-    void async_read_some(std::function<void(std::error_code, std::size_t)> callback) override;
+    Awaitable<std::size_t> async_write_some() override;
+    Awaitable<std::size_t> async_read_some() override;
 
-    void handshake(const std::string& hostname) override;
+    Awaitable<void> handshake(const std::string& hostname) override;
 
 protected:
     asio::ip::tcp::socket socket_;
@@ -278,10 +283,10 @@ public:
     }
 
 protected:
-    void async_write_some(std::function<void(std::error_code, std::size_t)> callback) override;
-    void async_read_some(std::function<void(std::error_code, std::size_t)> callback) override;
+    Awaitable<std::size_t> async_write_some() override;
+    Awaitable<std::size_t> async_read_some() override;
 
-    void handshake(const std::string& hostname) override;
+    Awaitable<void> handshake(const std::string& hostname) override;
 
 protected:
     asio::ssl::context ssl_context_;

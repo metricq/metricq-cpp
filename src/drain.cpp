@@ -38,7 +38,7 @@ Drain::~Drain()
 {
 }
 
-awaitable<void> Drain::on_connected()
+Awaitable<void> Drain::on_connected()
 {
     assert(!metrics_.empty());
 
@@ -50,7 +50,7 @@ awaitable<void> Drain::on_connected()
     co_await sink_config(response);
 }
 
-awaitable<void> Drain::on_data(const AMQP::Message& message, uint64_t delivery_tag,
+Awaitable<void> Drain::on_data(const AMQP::Message& message, uint64_t delivery_tag,
                                bool redelivered)
 {
     if (message.typeName() == "end")

@@ -1,4 +1,4 @@
-// Copyright (c) 2018, ZIH,
+// Copyright (c) 2021, ZIH,
 // Technische Universitaet Dresden,
 // Federal Republic of Germany
 //
@@ -29,42 +29,26 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
-#include <metricq/awaitable.hpp>
-#include <metricq/chrono.hpp>
-#include <metricq/connection.hpp>
+#include "log.hpp"
 
-#include <string>
-#include <vector>
+#include <metricq/exception.hpp>
+
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 
 namespace metricq
 {
-class Subscriber : public Connection
+
+template <typename Exception, typename... Args>
+[[noreturn]] inline void raise(fmt::string_view format, Args&&... args)
 {
-public:
-    explicit Subscriber(const std::string& token, Duration expires, bool add_uuid = true);
+    throw Exception(fmt::format(format, std::forward<Args...>(args...)));
+}
 
-    void add(const std::string& metric);
-
-    template <typename T>
-    void add(const T& metrics)
-    {
-        for (const auto& metric : metrics)
-        {
-            add(metric);
-        }
-    }
-
-    const std::string& queue() const
-    {
-        return queue_;
-    }
-
-protected:
-    Awaitable<void> on_connected() override;
-
-protected:
-    std::vector<std::string> metrics_;
-    std::string queue_;
-    Duration expires_;
-};
+template <typename Exception, typename... Args>
+[[noreturn]] inline void raise_logged(fmt::string_view format, Args&&... args)
+{
+    log::error(format, args...);
+    throw Exception(fmt::format(format, std::forward<Args...>(args...)));
+}
 } // namespace metricq

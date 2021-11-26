@@ -45,8 +45,8 @@ public:
     void on_closed() override;
 
 private:
-    metricq::awaitable<void> on_source_config(const metricq::json& config) override;
-    metricq::awaitable<void> on_source_ready() override;
+    metricq::Awaitable<void> on_source_config(const metricq::json& config) override;
+    metricq::Awaitable<void> on_source_ready() override;
 
     asio::signal_set signals_;
 

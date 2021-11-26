@@ -44,7 +44,7 @@ namespace metricq
 {
 HistoryClient::HistoryClient(const std::string& token, bool add_uuid) : Connection(token, add_uuid)
 {
-    register_rpc_callback("discover", [this](auto& request) -> awaitable<json> {
+    register_rpc_callback("discover", [this](auto& request) -> Awaitable<json> {
         co_return handle_discover_rpc(request);
     });
 }
@@ -113,14 +113,14 @@ void HistoryClient::on_history_response(const AMQP::Message& incoming_message)
     on_history_response(incoming_message.correlationID(), history_response_);
 }
 
-awaitable<void> HistoryClient::on_connected()
+Awaitable<void> HistoryClient::on_connected()
 {
     auto response = co_await rpc("history.register");
 
     co_await config(response);
 }
 
-awaitable<void> HistoryClient::config(const metricq::json& config)
+Awaitable<void> HistoryClient::config(const metricq::json& config)
 {
     co_await history_config(config);
 
@@ -141,12 +141,12 @@ awaitable<void> HistoryClient::config(const metricq::json& config)
     on_history_ready();
 }
 
-awaitable<void> HistoryClient::on_history_channel_ready()
+Awaitable<void> HistoryClient::on_history_channel_ready()
 {
     co_return;
 }
 
-awaitable<void> HistoryClient::history_config(const json& config)
+Awaitable<void> HistoryClient::history_config(const json& config)
 {
     AMQP::Address new_data_server_address =
         derive_address(config["dataServerAddress"].get<std::string>());
@@ -186,21 +186,21 @@ awaitable<void> HistoryClient::history_config(const json& config)
     history_channel_->onError(debug_error_cb("history channel error"));
 }
 
-void HistoryClient::close()
+Awaitable<void> HistoryClient::close()
 {
     // Close data connection first, then close the management connection
     if (!history_connection_)
     {
         log::debug("closing HistoryClient, no history_connection up yet");
-        Connection::close();
-        return;
+        co_await Connection::close();
+        co_return;
     }
 
     // don't let the data_connection::close() call the on_closed() of this class, the close of the
     // management connection shall call on_closed().
     history_connection_->close([this]() {
         log::info("closed history_connection");
-        Connection::close();
+        co_spawn(io_service, Connection::close(), *this);
     });
 }
 

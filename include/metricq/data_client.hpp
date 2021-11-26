@@ -52,12 +52,12 @@ public:
     ~DataClient();
 
 protected:
-    virtual awaitable<void> on_data_channel_ready();
-    awaitable<void> data_config(const json& config);
-    void close() override;
+    virtual Awaitable<void> on_data_channel_ready();
+    Awaitable<void> data_config(const json& config);
+    Awaitable<void> close() override;
 
 private:
-    awaitable<void> open_data_connection();
+    Awaitable<void> open_data_connection();
 
     std::optional<AMQP::Address> data_server_address_;
     std::unique_ptr<AsioConnectionHandler> data_connection_;

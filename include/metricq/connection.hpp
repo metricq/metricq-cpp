@@ -55,14 +55,14 @@ public:
     void main_loop();
 
 protected:
-    using AwaitableRPCCallback = std::function<awaitable<json>(const json& response)>;
+    using AwaitableRPCCallback = std::function<Awaitable<json>(const json& response)>;
 
     explicit Connection(const std::string& connection_token, bool add_uuid = false,
                         std::size_t concurrency_hint = 1);
     virtual ~Connection() = 0;
 
 public:
-    [[nodiscard]] awaitable<void> connect(const std::string& server_address);
+    [[nodiscard]] Awaitable<void> connect(const std::string& server_address);
 
     const std::string& token() const
     {
@@ -82,9 +82,9 @@ protected:
     {
     }
 
-    virtual awaitable<void> on_connected() = 0;
+    virtual Awaitable<void> on_connected() = 0;
 
-    awaitable<json> rpc(const std::string& function, json payload = json({}),
+    Awaitable<json> rpc(const std::string& function, json payload = json({}),
                         Duration timeout = std::chrono::seconds(60));
     void register_rpc_callback(const std::string& function, AwaitableRPCCallback callback);
 
@@ -92,7 +92,7 @@ protected:
     std::unique_ptr<AMQP::Envelope> prepare_rpc_envelope(const std::string& message);
 
     void stop();
-    virtual void close();
+    virtual Awaitable<void> close();
 
     AMQP::Address derive_address(const std::string& address);
 
@@ -102,7 +102,7 @@ protected:
 private:
     void handle_management_message(const AMQP::Message& incoming_message, uint64_t deliveryTag,
                                    bool redelivered);
-    awaitable<void> handle_rpc_message(const AMQP::Message& incoming_message, uint64_t deliveryTag);
+    Awaitable<void> handle_rpc_message(const AMQP::Message& incoming_message, uint64_t deliveryTag);
 
 public:
     asio::io_service io_service;
@@ -115,7 +115,7 @@ private:
     std::unique_ptr<AsioConnectionHandler> management_connection_;
     std::unique_ptr<AMQP::Channel> management_channel_;
     std::unordered_map<std::string, AwaitableRPCCallback> rpc_callbacks_;
-    std::unordered_map<std::string, std::promise<json>> rpc_promises_;
+    std::unordered_map<std::string, AsyncPromise<json>> rpc_promises_;
     std::string management_client_queue_;
     std::string management_queue_ = "management";
     std::string management_exchange_ = "metricq.management";

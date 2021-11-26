@@ -55,24 +55,25 @@ protected:
      * override this only in special cases where you manually handle acknowledgements
      * or do something after acks
      */
-    virtual awaitable<void> on_data(const AMQP::Message& message, uint64_t delivery_tag, bool redelivered);
+    virtual Awaitable<void> on_data(const AMQP::Message& message, uint64_t delivery_tag,
+                                    bool redelivered);
     /**
      * override this to handle chunks efficiently
      * if you do, you don't need to override data_callback(std::string, TimeValue)
      */
-    virtual awaitable<void> on_data(const std::string& id, const DataChunk& chunk);
+    virtual Awaitable<void> on_data(const std::string& id, const DataChunk& chunk);
     /**
      * override this to handle individual values
      */
-    virtual awaitable<void> on_data(const std::string& id, TimeValue tv);
+    virtual Awaitable<void> on_data(const std::string& id, TimeValue tv);
 
-    awaitable<void> sink_config(const json& config);
+    Awaitable<void> sink_config(const json& config);
 
     void update_metadata(const json& config);
 
-    awaitable<void> subscribe(const std::vector<std::string>& metrics);
+    Awaitable<void> subscribe(const std::vector<std::string>& metrics);
 
-    awaitable<void> subscribe(const std::vector<std::string>& metrics, Duration expires);
+    Awaitable<void> subscribe(const std::vector<std::string>& metrics, Duration expires);
 
     void data_queue(const std::string& name);
 

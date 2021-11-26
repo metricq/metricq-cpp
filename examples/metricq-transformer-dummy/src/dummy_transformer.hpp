@@ -55,7 +55,7 @@ protected:
 private:
     void on_transformer_config(const metricq::json& config) override;
     void on_transformer_ready() override;
-    metricq::awaitable<void> on_data(const std::string& id, metricq::TimeValue tv) override;
+    metricq::Awaitable<void> on_data(const std::string& id, metricq::TimeValue tv) override;
 
 private:
     asio::signal_set signals_;
