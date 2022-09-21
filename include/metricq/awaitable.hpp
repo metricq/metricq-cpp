@@ -42,6 +42,7 @@
 #include <asio/system_timer.hpp>
 #include <asio/use_awaitable.hpp>
 
+#include <exception>
 #include <future>
 #include <iostream>
 #include <optional>
@@ -150,7 +151,7 @@ public:
 
         using asio::experimental::awaitable_operators::operator||;
 
-        auto result = co_await(get() || timer.async_wait(use_awaitable));
+        auto result = co_await (get() || timer.async_wait(use_awaitable));
 
         timer.cancel();
         promise_.cancel();
@@ -181,14 +182,7 @@ class AsyncFuture<void>
 public:
     Awaitable<void> get()
     {
-        auto result = co_await promise_.async_wait(use_awaitable);
-
-        auto eptr = std::get<std::exception_ptr>(result);
-
-        if (eptr)
-        {
-            std::rethrow_exception(eptr);
-        }
+        co_await promise_.async_wait(use_awaitable);
     }
 
     Awaitable<void> get(Duration timeout)
@@ -198,12 +192,12 @@ public:
 
         using asio::experimental::awaitable_operators::operator||;
 
-        auto result = co_await(get() || timer.async_wait(use_awaitable));
+        auto result = co_await (get() || timer.async_wait(use_awaitable));
 
         timer.cancel();
         promise_.cancel();
 
-        if (std::holds_alternative<std::monostate>(result))
+        if (result.index() == 0)
         {
             co_return;
         }
@@ -273,6 +267,12 @@ public:
     void set_exception(std::exception_ptr eptr)
     {
         handler_(eptr);
+    }
+
+    template <typename Exception>
+    void set_exception(Exception&& e)
+    {
+        set_exception(std::make_exception_ptr(std::move(e)));
     }
 
     void set_done()

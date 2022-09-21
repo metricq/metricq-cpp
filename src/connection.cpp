@@ -226,12 +226,11 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
         if (content.count("error"))
         {
             log::error("rpc failed: {}.", content["error"].get<std::string>());
-            co_spawn(io_service,
-                     it->second.set_exception(std::make_exception_ptr(RPCError(content["error"]))));
+            it->second.set_exception(std::make_exception_ptr(RPCError(content["error"])));
         }
         else
         {
-            co_spawn(io_service, it->second.set_value(content));
+            it->second.set_value(content);
         }
 
         management_channel_->ack(deliveryTag);
@@ -362,7 +361,7 @@ Awaitable<void> Connection::close()
             // }
             log::info("closed management connection");
             on_closed();
-            co_spawn(io_service, closed.set_done());
+            closed.set_done();
         });
 
     auto future = closed.get_future();

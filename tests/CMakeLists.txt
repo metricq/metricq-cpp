@@ -16,3 +16,17 @@ endif()
 
 add_executable(asio_signal_handler asio_signal_handler.cpp)
 target_link_libraries(asio_signal_handler PUBLIC asio::asio amqpcpp::amqpcpp)
+
+Include(FetchContent)
+
+FetchContent_Declare(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG        v3.0.1 # or a later release
+)
+
+FetchContent_MakeAvailable(Catch2)
+
+add_executable(test_async_promise test_async_promise.cpp)
+target_link_libraries(test_async_promise PRIVATE Catch2::Catch2WithMain metricq::core)
+add_test(test_async_promise test_async_promise)
