@@ -61,7 +61,7 @@ Awaitable<void> Drain::on_data(const AMQP::Message& message, uint64_t delivery_t
         auto payload = json{ { "dataQueue", data_queue() } };
         co_await rpc("sink.release", payload);
 
-        close();
+        co_await close();
 
         co_return;
     }

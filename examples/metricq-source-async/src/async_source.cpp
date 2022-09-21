@@ -46,15 +46,17 @@ AsyncSource::AsyncSource(const std::string& server, const std::string& token,
     Log::debug() << "AsyncSource::AsyncSource() called";
 
     // Register signal handlers so that the daemon may be shut down.
-    signals_.async_wait([this](auto, auto signal) {
-        if (!signal)
+    signals_.async_wait(
+        [this](auto, auto signal)
         {
-            return;
-        }
-        Log::info() << "Caught signal " << signal << ". Shutdown.";
+            if (!signal)
+            {
+                return;
+            }
+            Log::info() << "Caught signal " << signal << ". Shutdown.";
 
-        stop_requested_ = true;
-    });
+            stop_requested_ = true;
+        });
 
     metricq::co_spawn(io_service, connect(server), *this);
 }
@@ -117,5 +119,5 @@ metricq::Awaitable<void> AsyncSource::task()
         metric.flush();
     }
 
-    close();
+    co_await close();
 }

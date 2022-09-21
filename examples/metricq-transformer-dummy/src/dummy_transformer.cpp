@@ -41,14 +41,16 @@ using Log = metricq::logger::nitro::Log;
 DummyTransformer::DummyTransformer(const std::string& manager_host, const std::string& token)
 : metricq::Transformer(token), signals_(io_service, SIGINT, SIGTERM)
 { // Register signal handlers so that the daemon may be shut down.
-    signals_.async_wait([this](auto, auto signal) {
-        if (!signal)
+    signals_.async_wait(
+        [this](auto, auto signal)
         {
-            return;
-        }
-        Log::info() << "Caught signal " << signal << ". Shutdown.";
-        close();
-    });
+            if (!signal)
+            {
+                return;
+            }
+            Log::info() << "Caught signal " << signal << ". Shutdown.";
+            metricq::co_spawn(io_service, close(), *this);
+        });
 
     metricq::co_spawn(io_service, connect(manager_host), *this);
 }

@@ -92,42 +92,54 @@ Awaitable<void> Connection::connect(const std::string& server_address)
             io_service, "Mgmt connection", connection_token_);
     }
 
-    management_connection_->set_error_callback(
-        [this](const auto& message) { this->on_error(message); });
+    management_connection_->set_error_callback([this](const auto& message)
+                                               { this->on_error(message); });
     management_connection_->set_close_callback([this]() { this->on_closed(); });
 
     co_await management_connection_->connect(*management_address_);
 
     management_channel_ = management_connection_->make_channel();
     management_channel_->onReady(debug_success_cb("management channel ready"));
-    management_channel_->onError([](auto message) {
-        log::error("management channel error: {}", message);
-        throw std::runtime_error(message);
-    });
+    management_channel_->onError(
+        [](auto message)
+        {
+            log::error("management channel error: {}", message);
+            throw std::runtime_error(message);
+        });
 
     management_client_queue_ = connection_token_ + "-rpc";
 
     management_channel_->declareQueue(management_client_queue_, AMQP::exclusive)
-        .onSuccess([this](const std::string& name, [[maybe_unused]] int msgcount,
-                          [[maybe_unused]] int consumercount) {
-            management_channel_
-                ->bindQueue(management_broadcast_exchange_, management_client_queue_, "#")
-                .onError([name](auto message) {
-                    log::error("error binding management queue to broadcast exchange: {}", message);
-                    throw std::runtime_error(
-                        "Couldn't bind the management queue to the broadcast exchange");
-                })
-                .onSuccess([this, name]() {
-                    management_channel_->consume(name)
-                        .onReceived([this](const AMQP::Message& message, uint64_t delivery_tag,
-                                           bool redelivered) {
-                            handle_management_message(message, delivery_tag, redelivered);
+        .onSuccess(
+            [this](const std::string& name, [[maybe_unused]] int msgcount,
+                   [[maybe_unused]] int consumercount)
+            {
+                management_channel_
+                    ->bindQueue(management_broadcast_exchange_, management_client_queue_, "#")
+                    .onError(
+                        [name](auto message)
+                        {
+                            log::error("error binding management queue to broadcast exchange: {}",
+                                       message);
+                            throw std::runtime_error(
+                                "Couldn't bind the management queue to the broadcast exchange");
                         })
-                        .onSuccess(
-                            [this]() { metricq::co_spawn(io_service, on_connected(), *this); })
-                        .onError(debug_error_cb("management consume error"));
-                });
-        });
+                    .onSuccess(
+                        [this, name]()
+                        {
+                            management_channel_->consume(name)
+                                .onReceived(
+                                    [this](const AMQP::Message& message, uint64_t delivery_tag,
+                                           bool redelivered) {
+                                        handle_management_message(message, delivery_tag,
+                                                                  redelivered);
+                                    })
+                                .onSuccess(
+                                    [this]()
+                                    { metricq::co_spawn(io_service, on_connected(), *this); })
+                                .onError(debug_error_cb("management consume error"));
+                        });
+            });
 }
 
 void Connection::register_rpc_callback(const std::string& function, AwaitableRPCCallback cb)
@@ -214,11 +226,12 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
         if (content.count("error"))
         {
             log::error("rpc failed: {}.", content["error"].get<std::string>());
-            it->second.set_exception(std::make_exception_ptr(RPCError(content["error"])));
+            co_spawn(io_service,
+                     it->second.set_exception(std::make_exception_ptr(RPCError(content["error"]))));
         }
         else
         {
-            it->second.set_value(content);
+            co_spawn(io_service, it->second.set_value(content));
         }
 
         management_channel_->ack(deliveryTag);
@@ -251,7 +264,8 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
             io_service,
             [this, correlation_id = incoming_message.correlationID(),
              reply_to = incoming_message.replyTo(), content, content_str, function,
-             callback = it->second]() -> Awaitable<void> {
+             callback = it->second]() -> Awaitable<void>
+            {
                 try
                 {
                     auto response = co_await callback(content);
@@ -333,21 +347,23 @@ Awaitable<void> Connection::close()
 
     // co_await wait_for(std::chrono::milliseconds(10));
 
-    AsyncPromise<void> closed(io_service);
+    auto closed = AsyncPromise<void>(io_service);
 
-    management_connection_->close([this, &closed]() {
-        // for (auto& promise : this->rpc_promises_)
-        // {
-        //     log::debug("crippling remaining promise");
-        //     // promise.second.set_exception(
-        //     //     std::make_exception_ptr(ConnectionClosedError("WHAAAAAA")));
+    management_connection_->close(
+        [this, &closed]()
+        {
+            // for (auto& promise : this->rpc_promises_)
+            // {
+            //     log::debug("crippling remaining promise");
+            //     // promise.second.set_exception(
+            //     //     std::make_exception_ptr(ConnectionClosedError("WHAAAAAA")));
 
-        //     promise.second.cancel();
-        // }
-        log::info("closed management connection");
-        on_closed();
-        closed.set_done();
-    });
+            //     promise.second.cancel();
+            // }
+            log::info("closed management connection");
+            on_closed();
+            co_spawn(io_service, closed.set_done());
+        });
 
     auto future = closed.get_future();
     co_await future.get();

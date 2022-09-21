@@ -157,16 +157,18 @@ metricq::Awaitable<void> SSLConnectionHandler::handshake(const std::string& host
 #ifdef METRICQ_SSL_SKIP_VERIFY
     // Building without SSL verification; DO NOT USE THIS IN PRODUCTION!
     // This code will skip ANY SSL certificate verification.
-    socket_.set_verify_callback([](bool, asio::ssl::verify_context& ctx) {
-        char subject_name[256];
-        X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
-        X509_NAME_oneline(X509_get_subject_name(cert), subject_name, 256);
+    socket_.set_verify_callback(
+        [](bool, asio::ssl::verify_context& ctx)
+        {
+            char subject_name[256];
+            X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
+            X509_NAME_oneline(X509_get_subject_name(cert), subject_name, 256);
 
-        log::debug("[{}] Visiting certificate for subject: {}", name_, subject_name);
+            log::debug("[{}] Visiting certificate for subject: {}", name_, subject_name);
 
-        log::warn("[{}] Skipping certificate verification.", name_);
-        return true;
-    });
+            log::warn("[{}] Skipping certificate verification.", name_);
+            return true;
+        });
 #else
     // This code will do proper SSL certification as described in RFC2818
     socket_.set_verify_callback(asio::ssl::rfc2818_verification(hostname));
@@ -485,7 +487,7 @@ Awaitable<std::size_t> PlainConnectionHandler::async_read_some()
 {
     assert(this->connection_);
     auto bytes_read = co_await socket_.async_read_some(
-        asio::buffer(recv_buffer_.prepare(connection_->maxFrame() * 32)), use_awaitable);
+        recv_buffer_.prepare(connection_->maxFrame() * 32), use_awaitable);
 
     co_return bytes_read;
 }
@@ -500,7 +502,7 @@ Awaitable<std::size_t> SSLConnectionHandler::async_read_some()
 {
     assert(this->connection_);
     auto bytes_read = co_await socket_.async_read_some(
-        asio::buffer(recv_buffer_.prepare(connection_->maxFrame() * 32)), use_awaitable);
+        recv_buffer_.prepare(connection_->maxFrame() * 32), use_awaitable);
 
     co_return bytes_read;
 }

@@ -47,31 +47,34 @@ DummySink::DummySink(const std::string& manager_host, const std::string& token,
   timeout_timer_(io_service)
 {
     // Register signal handlers so that the daemon may be shut down.
-    signals_.async_wait([this](auto, auto signal) {
-        if (!signal)
+    signals_.async_wait(
+        [this](auto, auto signal)
         {
-            return;
-        }
-        Log::info() << "Caught signal " << signal << ". Shutdown.";
-        metricq::co_spawn(
-            this->io_service,
-            [this]() -> metricq::Awaitable<void> {
-                auto payload =
-                    metricq::json{ { "dataQueue", data_queue() }, { "metrics", metrics_ } };
-                try
+            if (!signal)
+            {
+                return;
+            }
+            Log::info() << "Caught signal " << signal << ". Shutdown.";
+            metricq::co_spawn(
+                this->io_service,
+                [this]() -> metricq::Awaitable<void>
                 {
-                    co_await rpc("sink.unsubscribe", payload);
-                }
-                catch (std::exception& e)
-                {
-                    Log::info() << "unsubscribe rpc failed: " << e.what();
-                }
-                Log::info() << "Finished unsubscribe rpc";
-            },
-            *this);
-        timer_.cancel();
-        timeout_timer_.cancel();
-    });
+                    auto payload =
+                        metricq::json{ { "dataQueue", data_queue() }, { "metrics", metrics_ } };
+                    try
+                    {
+                        co_await rpc("sink.unsubscribe", payload);
+                    }
+                    catch (std::exception& e)
+                    {
+                        Log::info() << "unsubscribe rpc failed: " << e.what();
+                    }
+                    Log::info() << "Finished unsubscribe rpc";
+                },
+                *this);
+            timer_.cancel();
+            timeout_timer_.cancel();
+        });
 
     metricq::co_spawn(io_service, connect(manager_host), *this);
 }
@@ -93,7 +96,8 @@ metricq::Awaitable<void> DummySink::on_data_channel_ready()
     }
 
     timer_.start(
-        [this](std::error_code) {
+        [this](std::error_code)
+        {
             auto now = metricq::Clock::now();
 
             auto message_rate =
@@ -120,7 +124,8 @@ metricq::Awaitable<void> DummySink::on_data_channel_ready()
     if (timeout_.count())
     {
         timeout_timer_.start(
-            [this](std::error_code) {
+            [this](std::error_code)
+            {
                 Log::error() << "Data timeout! Didn't receive data in " << this->timeout_ << " ns.";
                 throw metricq::Exception("Request timeout");
 
@@ -162,7 +167,7 @@ metricq::Awaitable<void> DummySink::on_data(const AMQP::Message& message, uint64
 
         Log::debug() << "Response: " << response;
 
-        close();
+        co_await close();
 
         co_return;
     }
@@ -183,7 +188,7 @@ metricq::Awaitable<void> DummySink::on_data(const AMQP::Message& message, uint64
 
 metricq::Awaitable<void> DummySink::on_data(const std::string& name, metricq::TimeValue tv)
 {
-    // Log::debug() << "Received data for metric " << name << ": " << tv;
+    Log::debug() << "Received data for metric " << name << ": " << tv;
     message_count_++;
 
     co_return;
