@@ -35,6 +35,7 @@
 #include <metricq/json_fwd.hpp>
 
 #include <string>
+#include <variant>
 
 namespace metricq
 {
@@ -53,6 +54,9 @@ public:
     // shall NOT be used before on_history_ready() was called
     std::string history_request(const std::string& id, TimePoint begin, TimePoint end,
                                 Duration interval);
+    Awaitable<std::variant<HistoryResponseValueView, HistoryResponseAggregateView>>
+    history_data_request(const std::string& metric, TimePoint begin, TimePoint end,
+                         Duration interval, HistoryRequest type, Duration timeout);
 
 protected:
     virtual void on_history_response(const std::string& id, const HistoryResponse& response);
@@ -88,6 +92,7 @@ protected:
 private:
     std::optional<AMQP::Address> data_server_address_;
     std::unique_ptr<AsioConnectionHandler> history_connection_;
+    std::unordered_map<std::string, AsyncPromise<HistoryResponse>> response_promises_;
 
 protected:
     std::unique_ptr<AMQP::Channel> history_channel_;

@@ -36,11 +36,13 @@ namespace metricq
 {
 Db::Db(const std::string& token) : Sink(token)
 {
-    register_rpc_callback("config", [this](const json& config) -> Awaitable<json> {
-        auto subscribe_metrics = co_await on_db_config(config);
-        co_await this->subscribe(subscribe_metrics);
-        co_return json::object();
-    });
+    register_rpc_callback("config",
+                          [this](const json& config) -> Awaitable<json>
+                          {
+                              auto subscribe_metrics = co_await on_db_config(config);
+                              co_await this->subscribe(subscribe_metrics);
+                              co_return json::object();
+                          });
 }
 
 void Db::setup_history_queue(const AMQP::QueueCallback& callback)
@@ -52,10 +54,9 @@ void Db::setup_history_queue(const AMQP::QueueCallback& callback)
 Awaitable<void> Db::on_history(const AMQP::Message& incoming_message)
 {
     const auto& metric_name = incoming_message.routingkey();
-    auto message_string = std::string(incoming_message.body(), incoming_message.bodySize());
 
     history_request_.Clear();
-    history_request_.ParseFromString(message_string);
+    history_request_.ParseFromArray(incoming_message.body(), incoming_message.bodySize());
 
     auto begin = Clock::now();
 
@@ -94,31 +95,34 @@ Awaitable<void> Db::on_register_response(const json& response)
     auto subscribe_metrics = co_await on_db_config(response["config"].get<std::string>());
     co_await db_subscribe(subscribe_metrics);
 
-    setup_history_queue([this](const std::string& name, int message_count, int consumer_count) {
-        log::notice("setting up history queue, messages {}, consumers {}", message_count,
-                    consumer_count);
-
-        // we do not tolerate other consumers
-        if (consumer_count != 0)
+    setup_history_queue(
+        [this](const std::string& name, int message_count, int consumer_count)
         {
-            log::fatal("unexpected consumer count {} - are we not alone in the queue?",
-                       consumer_count);
-        }
+            log::notice("setting up history queue, messages {}, consumers {}", message_count,
+                        consumer_count);
 
-        auto message_cb = [this](const AMQP::Message& message, uint64_t deliveryTag,
-                                 bool redelivered) {
-            (void)redelivered;
+            // we do not tolerate other consumers
+            if (consumer_count != 0)
+            {
+                log::fatal("unexpected consumer count {} - are we not alone in the queue?",
+                           consumer_count);
+            }
 
-            co_spawn(io_service, on_history(message), *this);
-            data_channel_->ack(deliveryTag);
-        };
+            auto message_cb =
+                [this](const AMQP::Message& message, uint64_t deliveryTag, bool redelivered)
+            {
+                (void)redelivered;
 
-        data_channel_->consume(name)
-            .onReceived(message_cb)
-            .onSuccess(debug_success_cb("sink history queue consume success"))
-            .onError(debug_error_cb("sink history queue consume error"))
-            .onFinalize([]() { log::info("sink history queue consume finalize"); });
-    });
+                co_spawn(io_service, on_history(message), *this);
+                data_channel_->ack(deliveryTag);
+            };
+
+            data_channel_->consume(name)
+                .onReceived(message_cb)
+                .onSuccess(debug_success_cb("sink history queue consume success"))
+                .onError(debug_error_cb("sink history queue consume error"))
+                .onFinalize([]() { log::info("sink history queue consume finalize"); });
+        });
 
     co_await on_db_ready();
 }

@@ -230,7 +230,7 @@ void Connection::handle_management_message(const AMQP::Message& incoming_message
         }
         else
         {
-            it->second.set_value(content);
+            it->second.set_result(content);
         }
 
         management_channel_->ack(deliveryTag);
@@ -338,27 +338,11 @@ Awaitable<void> Connection::close()
         co_return;
     }
 
-    // for (auto& promise : this->rpc_promises_)
-    // {
-    //     log::debug("crippling remaining promise");
-    //     promise.second.set_exception(std::make_exception_ptr(ConnectionClosedError("WHAAAAAA")));
-    // }
-
-    // co_await wait_for(std::chrono::milliseconds(10));
-
     auto closed = AsyncPromise<void>(io_service);
 
     management_connection_->close(
         [this, &closed]()
         {
-            // for (auto& promise : this->rpc_promises_)
-            // {
-            //     log::debug("crippling remaining promise");
-            //     // promise.second.set_exception(
-            //     //     std::make_exception_ptr(ConnectionClosedError("WHAAAAAA")));
-
-            //     promise.second.cancel();
-            // }
             log::info("closed management connection");
             on_closed();
             closed.set_done();

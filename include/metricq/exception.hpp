@@ -76,4 +76,14 @@ public:
     }
 };
 
+class HistoryRequestError : public Exception
+{
+public:
+    using Exception::Exception;
+
+    HistoryRequestError(const std::string& what) : Exception("History request error: " + what)
+    {
+    }
+};
+
 } // namespace metricq

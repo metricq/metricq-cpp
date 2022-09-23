@@ -133,17 +133,17 @@ void Sink::setup_data_consumer(const std::string& name, int message_count, int c
         log::warn("unexpected consumer count {} - are we not alone in the queue?", consumer_count);
     }
 
-    auto message_cb = [this](const AMQP::Message& message, uint64_t delivery_tag,
-                             bool redelivered) {
-        co_spawn(io_service, on_data(message, delivery_tag, redelivered), *this);
-    };
+    auto message_cb = [this](const AMQP::Message& message, uint64_t delivery_tag, bool redelivered)
+    { co_spawn(io_service, on_data(message, delivery_tag, redelivered), *this); };
 
     data_channel_->consume(name)
         .onReceived(message_cb)
-        .onSuccess([this]() {
-            this->is_data_queue_set_up_ = true;
-            log::debug("sink data queue consume success");
-        })
+        .onSuccess(
+            [this]()
+            {
+                this->is_data_queue_set_up_ = true;
+                log::debug("sink data queue consume success");
+            })
         .onError(debug_error_cb("sink data queue consume error"))
         .onFinalize([]() { log::info("sink data queue consume finalize"); });
 }
@@ -171,11 +171,12 @@ Awaitable<void> Sink::on_data(const AMQP::Message& message, uint64_t delivery_ta
 {
     (void)redelivered;
     const auto& metric_name = message.routingkey();
-    auto message_body = std::string(message.body(), message.bodySize());
     data_chunk_.Clear();
-    data_chunk_.ParseFromString(message_body);
+    data_chunk_.ParseFromArray(message.body(), message.bodySize());
     try
     {
+        // FIXME I believe this is a race-condition. If the coroutine gets preempted during its
+        // execution, the data_chunk_ might have changed until it gets resumed.
         co_await on_data(metric_name, data_chunk_);
         data_channel_->ack(delivery_tag);
     }

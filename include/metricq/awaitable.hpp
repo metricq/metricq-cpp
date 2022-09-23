@@ -46,6 +46,7 @@
 #include <future>
 #include <iostream>
 #include <optional>
+#include <type_traits>
 
 namespace metricq
 {
@@ -114,51 +115,47 @@ inline void co_spawn(Executor& e, F&& f, ExceptionHandler& handler)
     asio::co_spawn(e, std::forward<F>(f), detail::CompletionHandler<ExceptionHandler>(handler));
 }
 
+inline Awaitable<void> wait_until(TimePoint timeout)
+{
+    asio::system_timer timer(co_await asio::this_coro::executor);
+    timer.expires_at(timeout);
+    co_await timer.async_wait(asio::use_awaitable);
+}
+
+inline Awaitable<void> wait_for(Duration timeout)
+{
+    asio::system_timer timer(co_await asio::this_coro::executor);
+    timer.expires_after(timeout);
+    co_await timer.async_wait(asio::use_awaitable);
+}
+
 template <typename T>
 class AsyncPromise;
 
 template <typename T>
 class AsyncFuture
 {
-    AsyncFuture(asio::experimental::promise<void(std::optional<T>, std::exception_ptr)>& promise)
-    : promise_(promise)
+    explicit AsyncFuture(
+        asio::experimental::promise<void(std::exception_ptr, std::optional<T>)>&& promise)
+    : promise_(std::move(promise))
     {
     }
 
 public:
     Awaitable<T> get()
     {
-        auto result = co_await promise_.async_wait(use_awaitable);
-
-        auto eptr = std::get<std::exception_ptr>(result);
-        auto value = std::get<std::optional<T>>(result);
-
-        if (eptr)
-        {
-            assert(!value.has_value());
-            std::rethrow_exception(eptr);
-        }
-
-        assert(value.has_value());
-
-        co_return value.value();
+        co_return *(co_await promise_.async_wait(use_awaitable));
     }
 
     Awaitable<T> get(Duration timeout)
     {
-        asio::system_timer timer(promise_.get_executor());
-        timer.expires_from_now(timeout);
-
         using asio::experimental::awaitable_operators::operator||;
 
-        auto result = co_await (get() || timer.async_wait(use_awaitable));
+        auto result = co_await (promise_.async_wait(use_awaitable) || wait_for(timeout));
 
-        timer.cancel();
-        promise_.cancel();
-
-        if (std::holds_alternative<T>(result))
+        if (result.index() == 0)
         {
-            co_return std::get<T>(result);
+            co_return std::forward<T>(*std::get<0>(result));
         }
         else
         {
@@ -169,13 +166,14 @@ public:
 private:
     friend class AsyncPromise<T>;
 
-    asio::experimental::promise<void(std::optional<T>, std::exception_ptr)>& promise_;
+    asio::experimental::promise<void(std::exception_ptr, std::optional<T>)> promise_;
 };
 
 template <>
 class AsyncFuture<void>
 {
-    AsyncFuture(asio::experimental::promise<void(std::exception_ptr)>& promise) : promise_(promise)
+    explicit AsyncFuture(asio::experimental::promise<void(std::exception_ptr)>&& promise)
+    : promise_(std::move(promise))
     {
     }
 
@@ -187,15 +185,9 @@ public:
 
     Awaitable<void> get(Duration timeout)
     {
-        asio::system_timer timer(promise_.get_executor());
-        timer.expires_from_now(timeout);
-
         using asio::experimental::awaitable_operators::operator||;
 
-        auto result = co_await (get() || timer.async_wait(use_awaitable));
-
-        timer.cancel();
-        promise_.cancel();
+        auto result = co_await (get() || wait_for(timeout));
 
         if (result.index() == 0)
         {
@@ -207,61 +199,90 @@ public:
         }
     }
 
-private:
-    friend class AsyncPromise<void>;
-
-    asio::experimental::promise<void(std::exception_ptr)>& promise_;
-};
-
-template <typename T>
-class AsyncPromise
-{
-public:
-    AsyncPromise(asio::io_context& io_context)
-    : handler_(io_context.get_executor()), promise_(handler_.make_promise())
-    {
-    }
-
-    void set_exception(std::exception_ptr eptr)
-    {
-        handler_({}, eptr);
-    }
-
-    void set_value(T&& value)
-    {
-        handler_(std::move(value), {});
-    }
-
-    void set_value(const T& value)
-    {
-        handler_(value, {});
-    }
-
-    AsyncFuture<T> get_future()
-    {
-        return { promise_ };
-    }
-
     void cancel()
     {
         promise_.cancel();
     }
 
 private:
-    using AsioPromiseHandler =
-        asio::experimental::detail::promise_handler<void(std::optional<T>, std::exception_ptr)>;
+    friend class AsyncPromise<void>;
 
+    asio::experimental::promise<void(std::exception_ptr)> promise_;
+};
+
+template <typename T>
+class AsyncPromise
+{
+    using AsioPromiseHandler =
+        asio::experimental::detail::promise_handler<void(std::exception_ptr, std::optional<T>)>;
+
+    struct PromiseCancellationHandler
+    {
+        AsioPromiseHandler& self_;
+
+        void operator()(asio::cancellation_type)
+        {
+            self_.impl_->completion({}, {});
+        }
+    };
+
+public:
+    explicit AsyncPromise(asio::io_context& io_context) : handler_(io_context.get_executor())
+    {
+        handler_.get_cancellation_slot().template emplace<PromiseCancellationHandler>(handler_);
+    }
+
+    void set_exception(std::exception_ptr eptr)
+    {
+        handler_(eptr, {});
+    }
+
+    template <typename Exception>
+    void set_exception(Exception&& e)
+    {
+        set_exception(std::make_exception_ptr(std::move(e)));
+    }
+
+    void set_result(T&& value)
+    {
+        handler_({}, std::move(value));
+    }
+
+    template <typename U, typename = std::enable_if_t<std::is_copy_constructible<T>::value &&
+                                                      std::is_same_v<T, U>>>
+    void set_result(const U& value)
+    {
+        handler_({}, value);
+    }
+
+    AsyncFuture<T> get_future()
+    {
+        return AsyncFuture<T>{ handler_.make_promise() };
+    }
+
+private:
     AsioPromiseHandler handler_;
-    asio::experimental::promise<void(std::optional<T>, std::exception_ptr)> promise_;
 };
 
 template <>
 class AsyncPromise<void>
 {
-public:
-    AsyncPromise(asio::io_context& io_context)
-    : handler_(io_context.get_executor()), promise_(handler_.make_promise())
+    using AsioPromiseHandler =
+        asio::experimental::detail::promise_handler<void(std::exception_ptr)>;
+    struct PromiseCancellationHandler
     {
+        AsioPromiseHandler& self_;
+
+        void operator()(asio::cancellation_type)
+        {
+            self_.impl_->completion({});
+        }
+    };
+
+public:
+    explicit AsyncPromise(asio::io_context& io_context) : handler_(io_context.get_executor())
+    {
+        handler_.get_cancellation_slot().emplace<PromiseCancellationHandler>(handler_);
     }
 
     void set_exception(std::exception_ptr eptr)
@@ -282,34 +303,11 @@ public:
 
     AsyncFuture<void> get_future()
     {
-        return { promise_ };
-    }
-
-    void cancel()
-    {
-        promise_.cancel();
+        return AsyncFuture<void>{ handler_.make_promise() };
     }
 
 private:
-    using AsioPromiseHandler =
-        asio::experimental::detail::promise_handler<void(std::exception_ptr)>;
-
     AsioPromiseHandler handler_;
-    asio::experimental::promise<void(std::exception_ptr)> promise_;
 };
-
-[[nodiscard]] inline Awaitable<void> wait_until(TimePoint timeout)
-{
-    asio::system_timer timer(co_await asio::this_coro::executor);
-    timer.expires_at(timeout);
-    co_await timer.async_wait(asio::use_awaitable);
-}
-
-[[nodiscard]] inline Awaitable<void> wait_for(Duration timeout)
-{
-    asio::system_timer timer(co_await asio::this_coro::executor);
-    timer.expires_from_now(timeout);
-    co_await timer.async_wait(asio::use_awaitable);
-}
 
 } // namespace metricq
