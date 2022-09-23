@@ -68,6 +68,21 @@ static void BM_parse(benchmark::State& state)
 }
 BENCHMARK(BM_parse)->Range(1, 1 << 20);
 
+static void BM_parse_from_array(benchmark::State& state)
+{
+    metricq::DataChunk data_chunk;
+    generate(data_chunk, state);
+    std::string string;
+    data_chunk.SerializeToString(&string);
+    for (auto _ : state)
+    {
+        data_chunk.ParseFromArray(string.c_str(), string.size());
+        benchmark::DoNotOptimize(data_chunk);
+    }
+    state.SetBytesProcessed(int64_t(state.iterations()) * int64_t(data_chunk.time_delta_size()));
+}
+BENCHMARK(BM_parse)->Range(1, 1 << 20);
+
 static void BM_foreach(benchmark::State& state)
 {
     metricq::DataChunk data_chunk;
