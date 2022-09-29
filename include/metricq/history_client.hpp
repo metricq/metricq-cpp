@@ -92,7 +92,7 @@ protected:
 private:
     std::optional<AMQP::Address> data_server_address_;
     std::unique_ptr<AsioConnectionHandler> history_connection_;
-    std::unordered_map<std::string, AsyncPromise<HistoryResponse>> response_promises_;
+    std::unordered_map<std::string, AsyncPromise<std::string>> response_promises_;
 
 protected:
     std::unique_ptr<AMQP::Channel> history_channel_;

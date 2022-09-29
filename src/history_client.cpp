@@ -108,7 +108,10 @@ HistoryClient::history_data_request(const std::string& metric, TimePoint begin, 
 
     history_channel_->publish(history_exchange_, metric, envelope);
 
-    auto response = co_await future.get(timeout);
+    auto response_data = co_await future.get(timeout);
+
+    HistoryResponse response;
+    response.ParseFromString(response_data);
 
     if (!response.error().empty())
     {
@@ -155,9 +158,7 @@ void HistoryClient::on_history_response(const AMQP::Message& incoming_message)
     if (auto it = response_promises_.find(incoming_message.correlationID());
         it != response_promises_.end())
     {
-        HistoryResponse response;
-        response.ParseFromArray(incoming_message.body(), incoming_message.bodySize());
-        it->second.set_result(std::move(response));
+        it->second.set_result(std::string(incoming_message.body(), incoming_message.bodySize()));
     }
     else
     {

@@ -1,11 +1,17 @@
-#undef CATCH_CONFIG_FAST_COMPILE
+#include <catch2/catch_template_test_macros.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+#include <metricq/awaitable.hpp>
+#include <metricq/history.pb.h>
 
 #include <asio.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <metricq/awaitable.hpp>
 
+#include <chrono>
 #include <iostream>
+#include <memory>
 #include <string>
+#include <tuple>
+#include <type_traits>
 
 using namespace metricq;
 
@@ -172,16 +178,6 @@ TEST_CASE("AsyncPromise<int> can be awaited")
                  }());
     }
 
-    SECTION("awaiting can timeout")
-    {
-        co_spawn(io_service,
-                 [&promise]() -> Awaitable<void>
-                 {
-                     auto future = promise.get_future();
-                     REQUIRE_THROWS(co_await future.get(std::chrono::milliseconds(1)));
-                 }());
-    }
-
     SECTION("Can be awaited from two futures")
     {
         co_spawn(io_service,
@@ -288,16 +284,6 @@ TEST_CASE("AsyncPromise<std::string> can be awaited")
                  {
                      promise.set_result("42");
                      co_return;
-                 }());
-    }
-
-    SECTION("awaiting can timeout")
-    {
-        co_spawn(io_service,
-                 [&promise]() -> Awaitable<void>
-                 {
-                     auto future = promise.get_future();
-                     REQUIRE_THROWS(co_await future.get(std::chrono::milliseconds(1)));
                  }());
     }
 
@@ -411,16 +397,6 @@ TEST_CASE("AsyncPromise<std::unique_ptr<std::string>> can be awaited")
                  }());
     }
 
-    SECTION("awaiting can timeout")
-    {
-        co_spawn(io_service,
-                 [&promise]() -> Awaitable<void>
-                 {
-                     auto future = promise.get_future();
-                     REQUIRE_THROWS(co_await future.get(std::chrono::milliseconds(1)));
-                 }());
-    }
-
     SECTION("Can be awaited from two futures")
     {
         co_spawn(io_service,
@@ -501,6 +477,101 @@ TEST_CASE("AsyncPromise<std::unique_ptr<std::string>> can be awaited")
                  [&promise]() -> Awaitable<void>
                  {
                      promise.set_exception(std::runtime_error("What a bummer!"));
+                     co_return;
+                 }());
+    }
+
+    io_service.run();
+}
+
+class MyPolymorphicClass
+{
+public:
+    MyPolymorphicClass() = default;
+
+    virtual ~MyPolymorphicClass() = default;
+
+    virtual std::string foo()
+    {
+        return data_;
+    }
+
+    std::string data_;
+};
+
+TEMPLATE_TEST_CASE("AsyncPromise<TestType> can time out", "[AsyncPromise][template]", int,
+                   std::string, (std::tuple<int, float>), std::unique_ptr<std::string>,
+                   MyPolymorphicClass)
+// I'm not sure why, but when trying to use a Protobuf-generated class
+// in the AsyncPromise, I get an error message, which I wasn't able to decipher.
+{
+    asio::io_service io_service;
+    metricq::AsyncPromise<TestType> promise(io_service);
+
+    SECTION("Can be awaited from one future")
+    {
+        co_spawn(io_service,
+                 [&promise]() -> Awaitable<void>
+                 {
+                     auto future = promise.get_future();
+                     auto result = co_await future.get();
+                     REQUIRE(std::is_same_v<TestType, decltype(result)>);
+                 }());
+        co_spawn(io_service,
+                 [&promise]() -> Awaitable<void>
+                 {
+                     promise.set_result(TestType{});
+                     co_return;
+                 }());
+    }
+
+    SECTION("Can be awaited with timeout")
+    {
+        co_spawn(io_service,
+                 [&promise]() -> Awaitable<void>
+                 {
+                     auto future = promise.get_future();
+                     auto result = co_await future.get(std::chrono::milliseconds(10));
+                     REQUIRE(std::is_same_v<TestType, decltype(result)>);
+                 }());
+        co_spawn(io_service,
+                 [&promise]() -> Awaitable<void>
+                 {
+                     promise.set_result(TestType{});
+                     co_return;
+                 }());
+    }
+
+    SECTION("awaiting can timeout")
+    {
+        co_spawn(io_service,
+                 [&promise]() -> Awaitable<void>
+                 {
+                     auto future = promise.get_future();
+                     REQUIRE_THROWS(co_await future.get(std::chrono::milliseconds(10)));
+                 }());
+    }
+
+    SECTION("Can be awaited from two futures")
+    {
+        co_spawn(io_service,
+                 [&promise]() -> Awaitable<void>
+                 {
+                     auto future = promise.get_future();
+                     auto result = co_await future.get();
+                     REQUIRE(std::is_same_v<TestType, decltype(result)>);
+                 }());
+        co_spawn(io_service,
+                 [&promise]() -> Awaitable<void>
+                 {
+                     auto future = promise.get_future();
+                     auto result = co_await future.get();
+                     REQUIRE(std::is_same_v<TestType, decltype(result)>);
+                 }());
+        co_spawn(io_service,
+                 [&promise]() -> Awaitable<void>
+                 {
+                     promise.set_result(TestType{});
                      co_return;
                  }());
     }
