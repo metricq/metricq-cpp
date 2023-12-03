@@ -118,7 +118,7 @@ void AsioConnectionHandler::connect(const AMQP::Address& address)
 
 void AsioConnectionHandler::connect(asio::ip::tcp::resolver::iterator endpoint_iterator)
 {
-    asio::async_connect(this->underlying_socket(), endpoint_iterator,
+    asio::async_connect(this->underlying_socket(), endpoint_iterator, asio::ip::tcp::resolver::iterator(),
                         [this](const auto& error, auto successful_endpoint) {
                             if (error)
                             {
