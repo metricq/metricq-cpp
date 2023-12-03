@@ -8,7 +8,9 @@ include(cmake/DefaultBuildType.cmake)
 include(cmake/GitSubmoduleUpdate.cmake)
 git_submodule_update()
 
-find_package(Protobuf 3.0 REQUIRED)
+set(protobuf_MODULE_COMPATIBLE ON CACHE BOOL "")
+find_package(Protobuf CONFIG REQUIRED)
+
 find_package(Git)
 
 if(NOT METRICQ_POSITION_INDEPENDENT_CODE)
