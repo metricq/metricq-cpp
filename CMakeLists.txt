@@ -9,7 +9,14 @@ include(cmake/GitSubmoduleUpdate.cmake)
 git_submodule_update()
 
 set(protobuf_MODULE_COMPATIBLE ON CACHE BOOL "")
-find_package(Protobuf CONFIG REQUIRED)
+find_package(Protobuf CONFIG)
+if(NOT Protobuf_FOUND)
+    find_package(Protobuf REQUIRED)
+    message(STATUS "Using protobuf MODULE mode")
+    # TODO Abseil dependencies
+else()
+    message(STATUS "Using protobuf CONFIG mode")
+endif()
 
 find_package(Git)
 
