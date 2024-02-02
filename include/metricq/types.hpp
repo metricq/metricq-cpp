@@ -128,8 +128,8 @@ class DataChunkIter
 {
 public:
     DataChunkIter(
-        google::protobuf::RepeatedField<const google::protobuf::int64>::iterator iter_time,
-        google::protobuf::RepeatedField<const double>::iterator iter_value)
+        google::protobuf::RepeatedField<google::protobuf::int64>::const_iterator iter_time,
+        google::protobuf::RepeatedField<double>::const_iterator iter_value)
     : iter_time(iter_time), iter_value(iter_value)
     {
     }
@@ -153,8 +153,8 @@ public:
     }
 
 private:
-    google::protobuf::RepeatedField<const google::protobuf::int64>::iterator iter_time;
-    google::protobuf::RepeatedField<const double>::iterator iter_value;
+    google::protobuf::RepeatedField<google::protobuf::int64>::const_iterator iter_time;
+    google::protobuf::RepeatedField<double>::const_iterator iter_value;
     int64_t timestamp = 0;
 };
 
@@ -180,10 +180,10 @@ public:
 #pragma GCC diagnostic ignored "-Wdeprecated"
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     HistoryRepsonseIter(
-        google::protobuf::RepeatedField<const google::protobuf::int64>::iterator iter_time,
-        google::protobuf::RepeatedField<const double>::iterator iter_value_min,
-        google::protobuf::RepeatedField<const double>::iterator iter_value_max,
-        google::protobuf::RepeatedField<const double>::iterator iter_value_avg)
+        google::protobuf::RepeatedField<google::protobuf::int64>::const_iterator iter_time,
+        google::protobuf::RepeatedField<double>::const_iterator iter_value_min,
+        google::protobuf::RepeatedField<double>::const_iterator iter_value_max,
+        google::protobuf::RepeatedField<double>::const_iterator iter_value_avg)
     : iter_time(iter_time), iter_value_min(iter_value_min), iter_value_max(iter_value_max),
       iter_value_avg(iter_value_avg)
     {
@@ -212,13 +212,13 @@ public:
     }
 
 private:
-    google::protobuf::RepeatedField<const google::protobuf::int64>::iterator iter_time;
+    google::protobuf::RepeatedField<google::protobuf::int64>::const_iterator iter_time;
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated"
-    google::protobuf::RepeatedField<const double>::iterator iter_value_min;
-    google::protobuf::RepeatedField<const double>::iterator iter_value_max;
-    google::protobuf::RepeatedField<const double>::iterator iter_value_avg;
+    google::protobuf::RepeatedField<double>::const_iterator iter_value_min;
+    google::protobuf::RepeatedField<double>::const_iterator iter_value_max;
+    google::protobuf::RepeatedField<double>::const_iterator iter_value_avg;
 #pragma GCC diagnostic pop
 
     int64_t timestamp = 0;
@@ -244,8 +244,8 @@ class HistoryResponseValueIterator
 {
 public:
     HistoryResponseValueIterator(
-        google::protobuf::RepeatedField<const google::protobuf::int64>::iterator iter_time,
-        google::protobuf::RepeatedField<const double>::iterator iter_value)
+        google::protobuf::RepeatedField<google::protobuf::int64>::const_iterator iter_time,
+        google::protobuf::RepeatedField<double>::const_iterator iter_value)
     : iter_time(iter_time), iter_value(iter_value)
     {
     }
@@ -272,8 +272,8 @@ public:
     }
 
 private:
-    google::protobuf::RepeatedField<const google::protobuf::int64>::iterator iter_time;
-    google::protobuf::RepeatedField<const double>::iterator iter_value;
+    google::protobuf::RepeatedField<google::protobuf::int64>::const_iterator iter_time;
+    google::protobuf::RepeatedField<double>::const_iterator iter_value;
 
     int64_t timestamp = 0;
 };
@@ -282,7 +282,7 @@ class HistoryResponseAggregateIterator
 {
 public:
     HistoryResponseAggregateIterator(
-        google::protobuf::RepeatedField<const google::protobuf::int64>::iterator iter_time,
+        google::protobuf::RepeatedField<google::protobuf::int64>::const_iterator iter_time,
         google::protobuf::RepeatedPtrField<HistoryResponse::Aggregate>::const_iterator
             iter_aggregate)
     : iter_time(iter_time), iter_aggregate(iter_aggregate)
@@ -314,7 +314,7 @@ public:
     }
 
 private:
-    google::protobuf::RepeatedField<const google::protobuf::int64>::iterator iter_time;
+    google::protobuf::RepeatedField<google::protobuf::int64>::const_iterator iter_time;
     google::protobuf::RepeatedPtrField<HistoryResponse::Aggregate>::const_iterator iter_aggregate;
 
     int64_t timestamp = 0;
